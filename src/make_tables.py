@@ -7,7 +7,7 @@ import sys, pandas as pd, numpy as np
 sys.path.insert(0,"src")
 OUT = "report"
 
-def emit(name, lines, caption="", label="", colspec="", header=""):
+def emit(name, lines, caption="", label="", colspec="", header="", wide=False):
     """
     Write a COMPLETE table environment.
 
@@ -16,17 +16,19 @@ def emit(name, lines, caption="", label="", colspec="", header=""):
     Emitting the whole environment and inputting it at top level avoids that.
     """
     body = "\n".join(l.rstrip() for l in lines).rstrip()
-    tex = (f"\\begin{{table}}[t]\n\\caption{{{caption}}}\n\\label{{{label}}}\n"
+    env = "table*" if wide else "table"
+    tex = (f"\\begin{{{env}}}[t]\n\\caption{{{caption}}}\n\\label{{{label}}}\n"
            f"\\centering\\footnotesize\n\\begin{{tabular}}{{{colspec}}}\n\\toprule\n"
            f"{header}\n\\midrule\n{body}\n\\bottomrule\n"
-           f"\\end{{tabular}}\n\\end{{table}}\n")
+           f"\\end{{tabular}}\n\\end{{{env}}}\n")
     open(f"{OUT}/{name}.tex", "w").write(tex)
 
-NICE = {"aalen_johansen":"Aalen--Johansen (null)","cause_specific_cox":"Cause-specific Cox",
-        "fine_gray":"Fine--Gray","rsf":"RSF (untuned)","deephit_a0.2":r"DeepHit $\alpha{=}0.2$ (untuned)",
-        "deephit_a0.5":r"DeepHit $\alpha{=}0.5$ (untuned)","deephit_a1":r"DeepHit $\alpha{=}1.0$ (untuned)","deephit_sel_auc":"DeepHit (tuned)",
-        "deephit_sel_ibs":"DeepHit (tuned, sel.\\ IBS)","rsf_sel_auc":"RSF (tuned)",
-        "rsf_sel_ibs":"RSF (tuned, sel.\\ IBS)"}
+NICE = {"aalen_johansen":"Aalen--Johansen","cause_specific_cox":"Cox",
+        "fine_gray":"Fine--Gray","rsf":"RSF","deephit_a0.2":r"DeepHit $\alpha{=}0.2$",
+        "deephit_a0.5":r"DeepHit $\alpha{=}0.5$","deephit_a1":r"DeepHit $\alpha{=}1$",
+        "deephit_sel_auc":"DeepHit (tuned)","deephit_sel_ibs":"DeepHit (sel.\\ IBS)",
+        "rsf_sel_auc":"RSF (tuned)","rsf_sel_ibs":"RSF (sel.\\ IBS)"}
+SHORT = {"postcrisis":"post", "crisis":"crisis", "default":"def.", "prepaid":"prep."}
 
 def pick(df, cause="default", h=60.0):
     return (df[(df.cause==cause)&df.metric.isin(["auc_td","ici"])&(df.horizon==h)]
@@ -37,13 +39,12 @@ rows=[]
 for tag,path,tr,te in [("Post-crisis","data/processed/loans.parquet","2013--2015","2016--2018"),
                        ("Crisis","data/processed/loans_crisis.parquet","2005--2006","2007--2009")]:
     d=pd.read_parquet(path); s=d.event.value_counts(normalize=True).reindex([0,1,2]).fillna(0)
-    rows.append(f"{tag} & {len(d):,} & {tr} & {te} & {s[1]*100:.1f}\\% & {s[2]*100:.1f}\\% & "
+    rows.append(f"{tag} & {len(d):,} & {s[1]*100:.1f}\\% & {s[2]*100:.1f}\\% & "
                 f"{s[0]*100:.1f}\\% & {(d.event!=1).mean()*100:.1f}\\% \\\\")
-emit("tab_data", rows,
-     caption=("The two cohorts. ``Censoring, default only'' recomputes the censoring "
+emit("tab_data", rows, caption=("The two cohorts. ``Censoring, default only'' recomputes the censoring "
               "rate when prepayment is treated as censored rather than as an event."),
-     label="tab:data", colspec="@{}lrllrrrr@{}",
-     header=r"Cohort & $n$ & Train & Test & Default & Prepaid & Cens. & Cens.\ (def.\ only) \\")
+     label="tab:data", colspec="@{}lrrrrr@{}",
+     header=r"Cohort & $n$ & Default & Prepaid & Cens. & Cens.\ (def.) \\")
 
 # ---------- T2: main results --------------------------------------------
 post = pick(pd.read_csv("results/featureset.csv").query("featureset=='rich'"))
@@ -76,7 +77,7 @@ for _,r in keep.iterrows():
     noisy = abs(r["diff"]) < 2*sd.loc[r.dataset,key]
     mark = r"$\dagger$" if noisy else ("\\textbf{*}" if r.significant else "n.s.")
     met = "AUC" if r.metric=="auc_td@60" else "ICI"
-    lines.append(f"{r.comparison} & {r.dataset} & {met} & {r['diff']:+.4f} & "
+    lines.append(f"{r.comparison} & {SHORT.get(r.dataset,r.dataset)} & {met} & {r['diff']:+.4f} & "
                  f"[{r.ci_lo:+.4f}, {r.ci_hi:+.4f}] & {r.p:.3f} & {mark} \\\\")
 emit("tab_sig", lines,
      caption=("Paired bootstrap on the tuned models ($B{=}500$), default, 60 months. "
@@ -94,19 +95,17 @@ for ca in ("default","prepaid"):
     for co in ("crisis","postcrisis"):
         lo, hi = g.loc[(co,ca,0.10)], g.loc[(co,ca,1.00)]
         sd = ab[(ab.cohort==co)&(ab.cause==ca)].groupby("alpha").auc.std().mean()
-        lines.append(f"{ca} & {co} & {lo.auc:.4f} & {hi.auc:.4f} & {hi.auc-lo.auc:+.4f} & "
-                     f"{sd:.4f} & {lo.ici:.4f} & {hi.ici:.4f} & {hi.ici-lo.ici:+.4f} \\\\")
+        lines.append(f"{SHORT.get(ca,ca)} & {SHORT.get(co,co)} & "
+                     f"{hi.auc-lo.auc:+.4f} & {sd:.4f} & {hi.ici-lo.ici:+.4f} \\\\")
 emit("tab_alpha", lines,
      caption=("Controlled ablation of DeepHit's loss weight $\\alpha$: architecture, "
               "learning rate, batch size, dropout and bin count held fixed, five seeds "
               "per setting, evaluated at 60 months on the held-out test vintages. "
               "$\\alpha=1$ removes the ranking term entirely. The effect reverses sign "
               "across cohorts and causes, and in one cell is smaller than the seed "
-              "standard deviation."),
-     label="tab:alpha", colspec="@{}llrrrrrrr@{}",
-     header=(r"& & \multicolumn{4}{c}{AUC at 60 months} & \multicolumn{3}{c}{ICI at 60 months} \\"
-             "\n" r"\cmidrule(lr){3-6}\cmidrule(lr){7-9}" "\n"
-             r"Cause & Cohort & $\alpha{=}0.1$ & $\alpha{=}1$ & $\Delta$ & seed sd & $\alpha{=}0.1$ & $\alpha{=}1$ & $\Delta$ \\"))
+              "standard deviation. $\\Delta$ is the change from $\\alpha{=}0.1$ to $\\alpha{=}1$."),
+     label="tab:alpha", colspec="@{}llrrr@{}",
+     header=r"Cause & Cohort & $\Delta$AUC & seed sd & $\Delta$ICI \\")
 
 # T5 (runtime) removed: the figures live in the prose of Section IV-E.
 
@@ -140,7 +139,7 @@ KEEP = {"cause_specific_cox", "deephit"}
 for (ds,ca,m),r in piv.iterrows():
     if m not in KEEP:
         continue
-    lines.append(f"{ds} & {ca} & {NICE.get(m, m.replace(chr(95), chr(92)+chr(95)))} & "
+    lines.append(f"{SHORT.get(ds,ds)} & {SHORT.get(ca,ca)} & {NICE.get(m, m.replace(chr(95), chr(92)+chr(95)))} & "
                  f"{r['raw']:.4f} & {r['recal_train']:.4f} & {r['recal_oracle']:.4f} \\\\")
 emit("tab_recal", lines,
      caption=("Post-hoc recalibration, ICI at 60 months. ``Train'' estimates the "

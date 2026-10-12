@@ -23,7 +23,7 @@
 \usepackage{graphicx}
 \usepackage{microtype}
 \usepackage{xcolor}
-\usepackage[numbers,sort&compress]{natbib}
+\usepackage{cite}
 \usepackage{url}
 \def\UrlBreaks{\do\/\do-\do.\do:\do_\do?\do\&}
 \Urlmuskip=0mu plus 1mu\relax
@@ -125,10 +125,10 @@ criterion.
 % MOVES: the two literatures -> what each review covers -> the hole between them
 %        -> our three individual reviews converge on it -> this paper tests it.
 Two recent reviews bracket this problem without meeting in the middle.
-\citet{shang2024survival} survey three decades of survival analysis in credit
+Shang et al.~\cite{shang2024survival} survey three decades of survival analysis in credit
 risk, organised around the assumptions these models make and their extension to
 new objectives, but do not examine how the resulting predictions are checked.
-\citet{wiegrebe2024deep} review more than fifty deep learning methods for
+Wiegrebe et al.~\cite{wiegrebe2024deep} review more than fifty deep learning methods for
 time-to-event data and observe that most handle only a single risk with
 censoring; they consider no credit application. Neither asks whether credit
 models produce faithful probabilities.
@@ -140,15 +140,15 @@ loans that choice moves the censoring rate from 20--85\% to
 risks explicitly, with cause-specific Cox models~\cite{DBLP:journals/jors/ThackhamM22},
 random survival forests~\cite{DBLP:journals/jors/FrydmanM22} and boosting~\cite{DBLP:journals/eswa/SaavedraGGK24},
 while macroeconomic covariates have long been used in the single-risk
-setting~\cite{DBLP:journals/jors/BellottiC09}. \citet{DBLP:journals/jors/BlumenstockLS22}
+setting~\cite{DBLP:journals/jors/BellottiC09}. Blumenstock et al.~\cite{DBLP:journals/jors/BlumenstockLS22}
 applied DeepHit to Freddie Mac mortgages and reported the highest concordance
 index in every experiment, evaluated over ten random train/test splits. On the
 evaluation side, DeepHit's loss combines a likelihood with a ranking term whose
 weight is tuned on validation discrimination~\cite{DBLP:conf/aaai/LeeZYS18};
-\citet{DBLP:journals/jmlr/HaiderHDG20} define D-calibration for single events,
-and \citet{DBLP:journals/bioinformatics/SonabendBV22} show that a concordance
+Haider et al.~\cite{DBLP:journals/jmlr/HaiderHDG20} define D-calibration for single events,
+and Sonabend et al.~\cite{DBLP:journals/bioinformatics/SonabendBV22} show that a concordance
 index computed on a predicted distribution depends on an unstated reduction to a
-single risk. Most recently, \citet{alberge2026calibration} show that existing
+single risk. Most recently, Alberge et al.~\cite{alberge2026calibration} show that existing
 calibration measures are unsuited to competing risks, introduce two proper
 measures, and give recalibration methods that improve probabilities while
 preserving discrimination. These measures have not been applied to credit data,
@@ -177,7 +177,7 @@ following~\cite{DBLP:journals/jors/BlumenstockLS22}; prepayment is zero-balance
 code 01. Time is measured as loan age in months, so the origin is origination.
 These data reproduce the contrast that motivates the competing-risks framing:
 counting prepayment as an event leaves 20.6\% of loans censored, while censoring
-it leaves 95.5\%. \citet{DBLP:journals/jors/DirickCB17} report 20--85\% and
+it leaves 95.5\%. Dirick et al.~\cite{DBLP:journals/jors/DirickCB17} report 20--85\% and
 94.56--98.16\% on ten European consumer-credit portfolios, so the same effect
 appears on a different product, country and decade. Prepayment is not a nuisance
 here but the dominant outcome: it outnumbers default seventeen to one.
@@ -205,7 +205,7 @@ function at the current time to its value at their event time, as
 in~\cite{finegray1999subdistribution}. Our forest is a cause-specific random
 survival forest, fitting one forest per cause, and is therefore a relative of
 rather than a replication of the composite-splitting competing-risks forest used
-by~\citet{DBLP:journals/jors/FrydmanM22}.
+by~Frydman and Matuszyk~\cite{DBLP:journals/jors/FrydmanM22}.
 
 \subsection{Metrics}
 % EVIDENCE: discrimination = IPCW time-dependent AUC at 12--60 months;
@@ -222,7 +222,7 @@ and an integrated calibration index comparing mean predicted risk against the
 Aalen--Johansen estimate within deciles of predicted risk. Cost is the measured
 fit and prediction time with the hardware recorded. Censoring weights come from a
 Kaplan--Meier estimate fitted on the training set only. We do not implement the
-per-cause calibration measures of~\citet{alberge2026calibration}; adding them is
+per-cause calibration measures of~Alberge et al.~\cite{alberge2026calibration}; adding them is
 the clearest extension of this work.
 
 \subsection{Splits, tuning budget and hypotheses}
@@ -375,7 +375,7 @@ the calibration gap.
 \input{tab_recal}
 
 \subsection{Recalibration does not help, and why}
-Since \citet{alberge2026calibration} show that recalibration improves
+Since Alberge et al.~\cite{alberge2026calibration} show that recalibration improves
 competing-risks probabilities while preserving discrimination, we applied a
 marginal per-horizon rescaling in that spirit, estimating it two ways
 (Table~\ref{tab:recal}). Fitted on the training vintages, which is all a lender
@@ -440,13 +440,13 @@ than an ordering, that combination is difficult to justify.
 
 Several limitations bound these conclusions. Our recalibration is a marginal
 per-horizon rescaling rather than the per-cause procedures of
-\citet{alberge2026calibration}; a stronger correction might close more of the gap,
+Alberge et al.~\cite{alberge2026calibration}; a stronger correction might close more of the gap,
 though the oracle column suggests the ceiling is set by what is knowable at
 scoring time rather than by the form of the map. Training variability is estimated
 from five bootstrap resamples, which conflates sampling with optimisation noise
 and is a coarse estimate. Our covariates are observed at origination, with
 no time-varying macroeconomic variables of the kind
-introduced by~\citet{DBLP:journals/jors/BellottiC09}. The forest is
+introduced by~Bellotti and Crook~\cite{DBLP:journals/jors/BellottiC09}. The forest is
 cause-specific rather than Ishwaran's competing-risks formulation, and all
 results come from a single family of US agency mortgages. Finally, with 150{,}000
 test subjects almost any difference attains significance, which is why we report
