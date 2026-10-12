@@ -86,16 +86,27 @@ emit("tab_sig", lines,
      label="tab:sig", colspec="@{}lllrlrl@{}",
      header=r"Test & Cohort & Metric & Diff & 95\% CI & $p$ & \\")
 
-# ---------- T4: alpha sweep ----------------------------------------------
-tr=pd.concat([pd.read_csv(f"results/tuning_trials_{t}.csv") for t in ("postcrisis","crisis")])
-d=tr[tr.family=="deephit"].groupby("alpha").agg(n=("val_auc","size"),
-        auc=("val_auc","mean"), ibs=("val_ibs","mean"))
-lines=[f"{a:.2f} & {int(r.n)} & {r.auc:.4f} & {r.ibs:.4f} \\\\" for a,r in d.iterrows()]
+# ---------- T4: alpha ABLATION (replaces the pooled tuning marginal) ------
+ab = pd.read_csv("results/alpha_ablation.csv")
+g = ab.groupby(["cohort","cause","alpha"])[["auc","ici"]].mean()
+lines=[]
+for ca in ("default","prepaid"):
+    for co in ("crisis","postcrisis"):
+        lo, hi = g.loc[(co,ca,0.10)], g.loc[(co,ca,1.00)]
+        sd = ab[(ab.cohort==co)&(ab.cause==ca)].groupby("alpha").auc.std().mean()
+        lines.append(f"{ca} & {co} & {lo.auc:.4f} & {hi.auc:.4f} & {hi.auc-lo.auc:+.4f} & "
+                     f"{sd:.4f} & {lo.ici:.4f} & {hi.ici:.4f} & {hi.ici-lo.ici:+.4f} \\\\")
 emit("tab_alpha", lines,
-     caption=("DeepHit's loss weight $\\alpha$ (1.0 = pure likelihood, no ranking term) "
-              "against inner-validation performance, pooled over 40 configurations and both cohorts."),
-     label="tab:alpha", colspec="@{}lrrr@{}",
-     header=r"$\alpha$ & Configs & Val.\ AUC & Val.\ IBS \\")
+     caption=("Controlled ablation of DeepHit's loss weight $\\alpha$: architecture, "
+              "learning rate, batch size, dropout and bin count held fixed, five seeds "
+              "per setting, evaluated at 60 months on the held-out test vintages. "
+              "$\\alpha=1$ removes the ranking term entirely. The effect reverses sign "
+              "across cohorts and causes, and in one cell is smaller than the seed "
+              "standard deviation."),
+     label="tab:alpha", colspec="@{}llrrrrrrr@{}",
+     header=(r"& & \multicolumn{4}{c}{AUC at 60 months} & \multicolumn{3}{c}{ICI at 60 months} \\"
+             "\n" r"\cmidrule(lr){3-6}\cmidrule(lr){7-9}" "\n"
+             r"Cause & Cohort & $\alpha{=}0.1$ & $\alpha{=}1$ & $\Delta$ & seed sd & $\alpha{=}0.1$ & $\alpha{=}1$ & $\Delta$ \\"))
 
 # T5 (runtime) removed: the figures live in the prose of Section IV-E.
 

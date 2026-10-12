@@ -1,17 +1,17 @@
 \begin{table}[t]
-\caption{DeepHit's loss weight $\alpha$ (1.0 = pure likelihood, no ranking term) against inner-validation performance, pooled over 40 configurations and both cohorts.}
+\caption{Controlled ablation of DeepHit's loss weight $\alpha$: architecture, learning rate, batch size, dropout and bin count held fixed, five seeds per setting, evaluated at 60 months on the held-out test vintages. $\alpha=1$ removes the ranking term entirely. The effect reverses sign across cohorts and causes, and in one cell is smaller than the seed standard deviation.}
 \label{tab:alpha}
 \centering\footnotesize
-\begin{tabular}{@{}lrrr@{}}
+\begin{tabular}{@{}llrrrrrrr@{}}
 \toprule
-$\alpha$ & Configs & Val.\ AUC & Val.\ IBS \\
+& & \multicolumn{4}{c}{AUC at 60 months} & \multicolumn{3}{c}{ICI at 60 months} \\
+\cmidrule(lr){3-6}\cmidrule(lr){7-9}
+Cause & Cohort & $\alpha{=}0.1$ & $\alpha{=}1$ & $\Delta$ & seed sd & $\alpha{=}0.1$ & $\alpha{=}1$ & $\Delta$ \\
 \midrule
-0.10 & 8 & 0.6579 & 0.0334 \\
-0.20 & 6 & 0.7490 & 0.0286 \\
-0.35 & 4 & 0.7697 & 0.0274 \\
-0.50 & 8 & 0.7755 & 0.0269 \\
-0.75 & 6 & 0.7724 & 0.0271 \\
-1.00 & 8 & 0.7760 & 0.0271 \\
+default & crisis & 0.8417 & 0.8492 & +0.0075 & 0.0033 & 0.0263 & 0.0253 & -0.0010 \\
+default & postcrisis & 0.7263 & 0.7267 & +0.0005 & 0.0018 & 0.0189 & 0.0303 & +0.0114 \\
+prepaid & crisis & 0.6509 & 0.5836 & -0.0673 & 0.0103 & 0.2705 & 0.3050 & +0.0345 \\
+prepaid & postcrisis & 0.6352 & 0.6738 & +0.0386 & 0.0062 & 0.2180 & 0.1783 & -0.0397 \\
 \bottomrule
 \end{tabular}
 \end{table}

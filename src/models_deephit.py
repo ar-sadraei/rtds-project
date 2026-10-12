@@ -75,7 +75,14 @@ class DeepHitModel:
 
     def __init__(self, alpha: float = 0.2, n_bins: int = 30, epochs: int = 50,
                  batch_size: int = 1024, lr: float = 1e-3, sigma: float = 0.1,
-                 dropout: float = 0.1, seed: int = 0, verbose: bool = False) -> None:
+                 dropout: float = 0.1, seed: int = 0, verbose: bool = False,
+                 t_max: float | None = None) -> None:
+        # t_max: explicit discretisation horizon. DeepHit's softmax over
+        # (cause, time-bin) sums to one, so the model asserts that every subject
+        # experiences an event by the last bin. Setting t_max administratively
+        # censors at that horizon, which makes the assumption explicit and lets
+        # it be varied -- see src/run_tmax.py.
+        self.t_max = t_max
         self.alpha, self.n_bins, self.epochs = alpha, n_bins, epochs
         self.batch_size, self.lr, self.sigma = batch_size, lr, sigma
         self.dropout, self.seed, self.verbose = dropout, seed, verbose
@@ -88,10 +95,17 @@ class DeepHitModel:
         self.std_ = _Standardiser().fit(X)
         Z = self.std_.transform(X).astype("float32")
 
+        if self.t_max is not None:
+            beyond = time > self.t_max
+            event = np.where(beyond, CENSORED, event)
+            time = np.minimum(time, self.t_max)
+
         self.causes_ = tuple(int(c) for c in np.unique(event) if c != CENSORED)
         n_causes = len(self.causes_)
 
-        self.labtrans_ = LabTransDiscreteTime(self.n_bins)
+        cuts = (np.linspace(0.0, float(self.t_max), self.n_bins)
+                if self.t_max is not None else self.n_bins)
+        self.labtrans_ = LabTransDiscreteTime(cuts)
         idx, _ = self.labtrans_.fit_transform(time, (event != CENSORED).astype(int))
         y = (idx.astype("int64"), event.astype("int64"))   # event: 0 censored, 1..K cause
 

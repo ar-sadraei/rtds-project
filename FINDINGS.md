@@ -1,6 +1,6 @@
 # What we have found
 
-*Updated 12 Oct 2026. For Amirreza, Ali Emre and Filip. Every number is traceable to a file in `results/`.*
+*Updated 12 Oct 2026 (α ablation added). For Amirreza, Ali Emre and Filip. Every number is traceable to a file in `results/`.*
 
 ## The one-sentence answer
 
@@ -42,17 +42,23 @@ ICI is **+0.0040 worse than Cox in both cohorts**. Whatever the regime, the deep
 ### 6. Nothing is gained over a random survival forest
 AUC statistically indistinguishable: **p = 0.968** (crisis), **p = 0.788** (post-crisis), both inside seed noise. On **crisis prepayment** the forest is clearly better: AUC 0.685 vs 0.620, ICI 0.154 vs 0.236.
 
-### 7. DeepHit's ranking term is harmful — the strongest single result
-Across 40 configurations and both cohorts, increasing the weight on the ranking loss makes **both** discrimination and calibration worse, monotonically:
+### 7. The loss weight is not a reliable knob — and a lesson about marginals
+Pooling the 40 tuning configurations by α appeared to show a strong monotone effect: validation AUC rising 0.658 → 0.776 as α goes 0.1 → 1.0. **That did not survive control.** In the search, α varied alongside depth, dropout, learning rate, batch size and bin count.
 
-| α | val AUC | val IBS |
-|---|---|---|
-| 0.10 | 0.658 | 0.0334 |
-| 0.20 *(pycox default)* | 0.749 | 0.0286 |
-| 0.50 | 0.776 | 0.0269 |
-| 1.00 *(pure likelihood)* | **0.776** | 0.0271 |
+A controlled ablation — everything else fixed, 5 seeds, both cohorts, test vintages:
 
-The reference implementation's default sits inside the harmful range, and DeepHit's own paper selects this weight on validation *discrimination*.
+| cause | cohort | AUC α=0.1 → α=1 | Δ | seed sd | ICI Δ |
+|---|---|---|---|---|---|
+| default | post-crisis | 0.7263 → 0.7267 | +0.0005 | 0.0018 | +0.0114 |
+| default | crisis | 0.8417 → 0.8492 | +0.0075 | 0.0033 | −0.0010 |
+| prepaid | post-crisis | 0.6352 → 0.6738 | +0.0386 | 0.0062 | −0.0397 |
+| prepaid | crisis | 0.6509 → 0.5836 | **−0.0673** | 0.0103 | +0.0345 |
+
+**The effect reverses sign across cohorts and causes.** Three of four cells exceed seed noise and they disagree on direction. There is no setting of α we can recommend.
+
+We also ruled out the competing explanation that DeepHit's discretisation horizon drives this: varying t_max over 72, 120 and 160 months leaves the α effect flat (`results/tmax_ablation.csv`).
+
+The more useful result is methodological: **a marginal taken over a random search is not an ablation.** Reading one as the other is how a hyperparameter acquires a reputation it has not earned.
 
 ### 8. The classical models are the unstable ones — not the deep one
 Five bootstrap resamples of the training vintages, evaluated on the fixed test set, default AUC at 60 months:
@@ -125,12 +131,14 @@ All three were caught by checks rather than luck, which is itself an argument fo
 
 **The selection-criterion effect was overstated.** It looked consistent across four cells until seed variability was quantified, at which point three fell inside the noise.
 
+**The α result was confounded.** The pooled tuning table suggested the ranking loss weight was the dominant hyperparameter and monotonically harmful. A controlled ablation showed the effect is small and sign-inconsistent — the pooled view had confounded α with the architectures it co-occurred with.
+
 **"Well outside seed variation" was wrong.** The crisis win was measured against DeepHit's seed noise while ignoring Cox's, which turned out to be 4.5× larger. Finding 8 exists because of that error.
 
 ---
 
 ## Where this leaves the paper
 
-> On mortgage data, under one protocol with time-ordered splits and an equal tuning budget, deep competing-risks models offer no reliable advantage over classical or tree-based baselines, are consistently worse calibrated, cost roughly 2,000× more to fit, and their signature ranking loss degrades both of the things it is meant to improve. The calibration gap is not a correctable artefact of the model but a consequence of the regime shift between origination vintages.
+> On mortgage data, under one protocol with time-ordered splits and an equal tuning budget, deep competing-risks models offer no reliable advantage over classical or tree-based baselines, are consistently worse calibrated, cost roughly 2,000× more to fit, and and the strong effect their loss weight appears to have in a pooled hyperparameter search does not survive controlled variation. The calibration gap is not a correctable artefact of the model but a consequence of the regime shift between origination vintages.
 
 It engages all three reviews: Filip's tuning-budget and cost gap, Ali's calibration measures, Amirreza's competing-risks credit setting.

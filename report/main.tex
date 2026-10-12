@@ -51,10 +51,10 @@ calibration and computational cost together, with vintage-ordered splits and an
 equal, documented tuning budget. DeepHit's advantage depends on the regime: with
 tuning it beats a cause-specific Cox model by 0.019 AUC on crisis-era loans and
 loses to it by 0.009 on recent ones. Its calibration penalty does not reverse,
-and it never beats a random survival forest. Across 40 configurations, raising
-the weight on DeepHit's ranking loss degrades discrimination and calibration
-together, monotonically, with the reference implementation's default inside the
-harmful range. We also pre-registered and failed to confirm the hypothesis that
+and it never beats a random survival forest. A pooled view of 40 tuning configurations
+appears to show that DeepHit's ranking-loss weight strongly affects both
+discrimination and calibration; a controlled ablation holding architecture fixed
+shows the effect is small and reverses sign across cohorts and causes. We also pre-registered and failed to confirm the hypothesis that
 selecting on discrimination costs calibration.
 \end{abstract}
 
@@ -321,24 +321,37 @@ calibration index of 0.154 against 0.236. The competing event, which the credit
 literature most often censors, is where the gap between the two is widest
 (Fig.~\ref{fig:calib}, right).
 
-\subsection{The ranking term is harmful}
+\subsection{The loss weight is not a reliable knob}
 % CLAIM: across 40 configurations, weighting the ranking loss more heavily makes
 %        BOTH discrimination and calibration worse, monotonically.
 % EVIDENCE (Table~\ref{tab:alpha}): validation AUC rises 0.658 -> 0.776 as alpha
 %   goes 0.1 -> 1.0; IBS improves too. pycox's default alpha = 0.2 sits inside the
 %   harmful range. DeepHit's own paper tunes this weight on validation discrimination.
-The weight $\alpha$ on DeepHit's likelihood term, which trades the model's
-ranking loss against its likelihood, turned out to be the dominant
-hyperparameter, and its effect runs opposite to the design intent
-(Table~\ref{tab:alpha}). Pooling all forty configurations across both cohorts,
-validation AUC rises from 0.658 at $\alpha=0.1$, where the ranking term carries
-nine tenths of the objective, to 0.776 at $\alpha=1.0$, where it is absent
-altogether. The integrated Brier score improves over the same range. Weighting
-the ranking loss more heavily therefore degrades discrimination and calibration
-together, and the reference implementation's default of $\alpha=0.2$ lies inside
-the harmful region. Since the original model selects this weight on validation
-discrimination~\cite{DBLP:conf/aaai/LeeZYS18}, the component intended to sharpen
-ranking is, on these data, the component that blunts it.
+DeepHit's loss is a convex combination $\alpha\cdot$likelihood
+$+\,(1-\alpha)\cdot$ranking, and the original model selects this weight on
+validation discrimination~\cite{DBLP:conf/aaai/LeeZYS18}. Pooling our forty
+tuning configurations by $\alpha$ suggests a strong monotone effect, with mean
+validation AUC rising from 0.658 at $\alpha=0.1$ to 0.776 at $\alpha=1.0$. That
+apparent effect does not survive control. In the search, $\alpha$ varied
+alongside depth, dropout, learning rate, batch size and bin count, so the
+marginal confounds the loss weight with the architectures it happened to be drawn
+with.
+
+Holding everything else fixed and varying only $\alpha$, over five seeds and both
+cohorts, the effect is small and inconsistent in sign (Table~\ref{tab:alpha}). On
+post-crisis default it is invisible in discrimination, $+0.0005$ against a seed
+standard deviation of 0.0018, while calibration worsens steadily as the ranking
+term is removed, from 0.0189 to 0.0303. On crisis prepayment the pattern inverts:
+removing the ranking term costs 0.067 of AUC and worsens calibration. On
+post-crisis prepayment, removing it \emph{improves} both. Of the four
+cause-by-cohort cells, three show a discrimination effect larger than seed noise
+and they do not agree on direction.
+
+Two things follow. The loss weight is not the dominant hyperparameter the pooled
+view suggested, and no setting of it can be recommended from these data. More
+usefully, the discrepancy between the two views is itself a result: a marginal
+taken over a random search is not an ablation, and reading one as the other is how
+a hyperparameter acquires a reputation it has not earned.
 
 \input{tab_alpha}
 
@@ -445,8 +458,9 @@ Under one protocol that measures ranking, calibration and cost together on
 vintage-ordered splits, deep competing-risks models offer no reliable advantage
 over classical or tree-based baselines on mortgage data, are consistently worse
 calibrated, and depend on the economic regime for whatever advantage they do
-show. The ranking term that distinguishes DeepHit from a likelihood-only model
-degrades both of the things it is meant to improve.
+show. The loss weight that distinguishes DeepHit from a likelihood-only model has no
+consistent effect once architecture is held fixed, and the strong effect visible
+in a pooled hyperparameter search does not survive controlled variation.
 
 \section*{Code and Data}
 % Lecture 8: "Make code available publicly."
