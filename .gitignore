@@ -1,0 +1,34 @@
+# ---- data ------------------------------------------------------------
+# Freddie Mac SFLLD archives are free for academic use but may not be
+# redistributed, so nothing under data/ is tracked. src/build_dataset.py
+# rebuilds data/processed/ from the downloaded archives; DATA.md has the
+# download steps and the field layout reference.
+data/
+
+# ---- environment -----------------------------------------------------
+.venv/
+__pycache__/
+*.py[cod]
+
+# ---- LaTeX build artefacts ------------------------------------------
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+*.toc
+
+# Generated tables and figures are reproducible from results/ via
+# src/make_tables.py and src/make_figure.py, but they are small and
+# keeping them means the PDF builds on a clean checkout.
+!report/tab_*.tex
+!report/fig_*.pdf
+
+# ---- os --------------------------------------------------------------
+.DS_Store
+
+# editor backups
+*.bak

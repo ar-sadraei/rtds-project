@@ -1,0 +1,17 @@
+\begin{table}[t]
+\caption{DeepHit's loss weight $\alpha$ (1.0 = pure likelihood, no ranking term) against inner-validation performance, pooled over 40 configurations and both cohorts.}
+\label{tab:alpha}
+\centering\footnotesize
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+$\alpha$ & Configs & Val.\ AUC & Val.\ IBS \\
+\midrule
+0.10 & 8 & 0.6579 & 0.0334 \\
+0.20 & 6 & 0.7490 & 0.0286 \\
+0.35 & 4 & 0.7697 & 0.0274 \\
+0.50 & 8 & 0.7755 & 0.0269 \\
+0.75 & 6 & 0.7724 & 0.0271 \\
+1.00 & 8 & 0.7760 & 0.0271 \\
+\bottomrule
+\end{tabular}
+\end{table}
