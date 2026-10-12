@@ -187,12 +187,22 @@ bootstrap replicates. All already declared in the limitations.
 
 ---
 
-## Priority before submission
+## Status
 
-1. **C** — hedge the crisis calibration penalty (changes what the paper claims).
-2. **A4** — one word in the abstract.
-3. **A2** — `p < 0.002` in Table IV.
-4. **B1** — rename the metric or cite and qualify.
-5. **A3** — one sentence in §III-C.
-6. **B2** — one sentence in §III-B.
-7. **A1** — fix the code; no numbers change.
+All seven items were applied on 12 Oct 2026.
+
+| item | what was done |
+|---|---|
+| C | §IV-A now states the gap is ~18 combined training SDs post-crisis and ~1.7 on crisis data: "the sign replicates; the size does not". Poster panel 1 and `FINDINGS.md` finding 5 carry the same hedge. |
+| A1 | `auc_td` now weights competing-event controls by 1/G(T−). Verified it reproduces every published figure to four decimals. |
+| A2 | `make_tables.py` prints `$<$0.002` at the bootstrap floor. |
+| A3 | §III-D defines the family and states that thirty-six tests are computed. |
+| A4 | The abstract names the budget (twenty and eight) instead of calling it equal. |
+| B1 | Renamed "calibration index"; §III-C cites Austin & Steyerberg (2019) and Austin et al. (2022) and states the deviation. Both entries verified against Crossref. |
+| B2 | §III-C states G(60) = 0.9986 and that the competing event, not censoring, shapes the results. |
+| B3 | §III-A now says our figures sit "at the lower edge of the first range and inside the second". |
+
+Fitting the additions back into five pages cost some prose elsewhere: the §IV-A
+paragraph no longer restates the figure caption, the cost paragraph dropped its
+duplicated search timings, and the closing paragraph no longer repeats the
+opening one.

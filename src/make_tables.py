@@ -67,13 +67,23 @@ for m in order:
     lines.append(f"{NICE[m]} & {g(cris,'auc_td')} & {g(cris,'ici')} & "
                  f"{g(post,'auc_td')} & {g(post,'ici')} \\\\")
 emit("tab_main", lines,
-     caption=("Discrimination (AUC at 60 months) and calibration (ICI at 60 months) for "
-              "default, on the held-out test vintages of each cohort. Lower ICI is better."),
+     caption=("Discrimination (AUC at 60 months) and calibration (decile-binned ICI "
+              "at 60 months) for "
+              "default, on the held-out test vintages of each cohort."),
      label="tab:main", colspec="@{}lrrrr@{}",
      header=(r"& \multicolumn{2}{c}{Crisis (2007--09)} & \multicolumn{2}{c}{Post-crisis (2016--18)} \\"
              "\n" r"\cmidrule(lr){2-3}\cmidrule(lr){4-5}" "\n" r"Model & AUC & ICI & AUC & ICI \\"))
 
 # ---------- T3: significance, tuned --------------------------------------
+# A bootstrap of B resamples cannot resolve a p below 1/B, so the floor value is
+# an upper bound, not a point estimate. Printing "0.002" for 31 of 36 tests read
+# as far more precision than B=500 can deliver.
+B_BOOT = 500
+
+def pfmt(p: float) -> str:
+    return r"$<$0.002" if p <= 1.0 / B_BOOT + 1e-12 else f"{p:.3f}"
+
+
 s=pd.read_csv("results/significance_tuned.csv")
 sd=pd.read_csv("results/deephit_seed_spread.csv").groupby("dataset")[["auc_td@60","ici@60"]].std()
 keep=s[(s.cause=="default")&s.metric.isin(["auc_td@60","ici@60"])]
@@ -84,7 +94,7 @@ for _,r in keep.iterrows():
     mark = r"$\dagger$" if noisy else ("\\textbf{*}" if r.significant else "n.s.")
     met = "AUC" if r.metric=="auc_td@60" else "ICI"
     lines.append(f"{r.comparison} & {SHORT.get(r.dataset,r.dataset)} & {met} & {r['diff']:+.4f} & "
-                 f"[{r.ci_lo:+.4f}, {r.ci_hi:+.4f}] & {r.p:.3f} & {mark} \\\\")
+                 f"[{r.ci_lo:+.4f}, {r.ci_hi:+.4f}] & {pfmt(r.p)} & {mark} \\\\")
 emit("tab_sig", lines,
      caption=("Paired bootstrap on the tuned models ($B{=}500$), default, 60 months. "
               "T1 DeepHit vs Cox; T2 DeepHit vs RSF; T3 DeepHit selected on AUC vs on IBS. "

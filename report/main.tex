@@ -47,8 +47,9 @@ which loans are riskiest, and a loan can end by default, prepayment or maturity.
 Deep competing-risks models are usually reported on ranking alone. We benchmark
 cause-specific Cox, Fine--Gray, a random survival forest and DeepHit on 550{,}000
 Freddie Mac mortgages under one protocol that measures discrimination,
-calibration and computational cost together, with vintage-ordered splits and an
-equal, documented tuning budget. DeepHit's advantage depends on the regime: with
+calibration and computational cost together, with vintage-ordered splits and a
+tuning budget fixed in advance at twenty configurations for DeepHit and eight
+for the forest. DeepHit's advantage depends on the regime: with
 tuning it beats a cause-specific Cox model by 0.019 AUC on crisis-era loans and
 loses to it by 0.009 on recent ones. Its calibration penalty does not reverse,
 and it never beats a random survival forest. A pooled view of 40 tuning configurations
@@ -125,12 +126,11 @@ criterion.
 % MOVES: the two literatures -> what each review covers -> the hole between them
 %        -> our three individual reviews converge on it -> this paper tests it.
 Two recent reviews bracket this problem without meeting in the middle.
-Shang et al.~\cite{shang2024survival} survey three decades of survival analysis in credit
-risk, organised around the assumptions these models make and their extension to
-new objectives, but do not examine how the resulting predictions are checked.
-Wiegrebe et al.~\cite{wiegrebe2024deep} review more than fifty deep learning methods for
-time-to-event data and observe that most handle only a single risk with
-censoring; they consider no credit application. Neither asks whether credit
+Shang et al.~\cite{shang2024survival} survey three decades of survival analysis in
+credit risk but do not examine how the resulting predictions are checked.
+Wiegrebe et al.~\cite{wiegrebe2024deep} review more than fifty deep learning methods
+for time-to-event data and observe that most handle only a single risk; they
+consider no credit application. Neither asks whether credit
 models produce faithful probabilities.
 
 On the credit side, the field's benchmark compares eight survival models on ten
@@ -174,13 +174,13 @@ Single-Family Loan-Level Dataset: 300{,}000 loans originated 2013--2018 and
 250{,}000 originated 2005--2009, with performance observed to March 2026
 (Table~\ref{tab:data}). Default is the first month at 90 or more days past due,
 following~\cite{DBLP:journals/jors/BlumenstockLS22}; prepayment is zero-balance
-code 01. Time is measured as loan age in months, so the origin is origination.
+code 01. Time is loan age in months, so the origin is origination.
 These data reproduce the contrast that motivates the competing-risks framing:
 counting prepayment as an event leaves 20.6\% of loans censored, while censoring
 it leaves 95.5\%. Dirick et al.~\cite{DBLP:journals/jors/DirickCB17} report 20--85\% and
-94.56--98.16\% on ten European consumer-credit portfolios, so the same effect
-appears on a different product, country and decade. Prepayment is not a nuisance
-here but the dominant outcome: it outnumbers default seventeen to one.
+94.56--98.16\% on ten European consumer-credit portfolios; ours sit at the lower
+edge of the first range and inside the second, on a different product, country
+and decade. Prepayment outnumbers default seventeen to one.
 
 \input{tab_data}
 
@@ -218,10 +218,16 @@ Discrimination is the inverse-probability-of-censoring-weighted time-dependent
 AUC at 12 to 60 months, with subjects who experience the competing event treated
 as controls because they can never experience the cause of interest. Calibration
 is measured in two ways: the integrated Brier score for the cumulative incidence,
-and an integrated calibration index comparing mean predicted risk against the
-Aalen--Johansen estimate within deciles of predicted risk. Cost is the measured
+and a calibration index comparing mean predicted risk against the
+Aalen--Johansen estimate within deciles of predicted risk. It is a binned form of the
+integrated calibration index~\cite{austin2019ici}, whose competing-risks version
+smooths the calibration curve rather than binning
+it~\cite{austin2022icicr}. Cost is the measured
 fit and prediction time with the hardware recorded. Censoring weights come from a
-Kaplan--Meier estimate fitted on the training set only. We do not implement the
+Kaplan--Meier estimate fitted on the training set only. Because the time origin
+is origination and every vintage has at least eight years of follow-up, censoring
+before 60 months is rare: $G(60)=0.9986$ in both cohorts, so these weights are
+near one and it is the competing event, not censoring, that shapes the results. We do not implement the
 per-cause calibration measures of~Alberge et al.~\cite{alberge2026calibration}; adding them is
 the clearest extension of this work.
 
@@ -240,16 +246,19 @@ trains on 2013--2015 and tests on 2016--2018; the crisis cohort trains on
 2005--2006 and tests on 2007--2009. Hyperparameters were searched with a budget
 fixed in advance: twenty random configurations for DeepHit and eight for the
 forest, scored on an out-of-time validation vintage held inside the training
-years, so test vintages were never touched during tuning. Cox and Fine--Gray have
-no comparable hyperparameters and are reported untuned. Each configuration was
-scored on validation AUC and on validation integrated Brier score, and the winner
-under each criterion was refitted and evaluated separately.
+years, so test vintages were never touched during tuning. Cox and Fine--Gray are
+reported untuned. Each configuration was scored on validation AUC and on
+validation integrated Brier score, and the winner under each criterion was
+refitted and evaluated separately.
 
 For inference we fixed, before examining any test result, a two-sided null
 hypothesis that the models do not differ, a significance level of 0.05, and a
 Bonferroni correction across the three metric families, giving a threshold of
-0.0167. Differences are assessed by a paired bootstrap over the test set with 500
-resamples, which keeps the pairing that makes some loans hard for every model.
+0.0167. A family is the three metrics of one pre-specified comparison in one cohort;
+thirty-six tests are computed in all, so the correction holds within a family,
+not across the table. Differences are assessed by a paired bootstrap over the test set with 500
+resamples, which cannot resolve $p$ below $1/500$, so $0.002$ is reported as an
+upper bound.
 Because the bootstrap holds the fitted model fixed and therefore understates
 total uncertainty, DeepHit was additionally refitted with five seeds per cohort;
 its seed-to-seed standard deviation was 0.0014 and 0.0010 in AUC, and we treat
@@ -275,18 +284,18 @@ that is significant under the paired bootstrap. That margin should be read with
 care: refitting on bootstrap resamples of the training vintages
 (Table~\ref{tab:var}) gives the Cox model a standard deviation of 0.0159 in this
 cohort, against 0.0035 for DeepHit, so the gap is little more than one standard
-deviation of the baseline's own training variability. The classical models are
-the unstable ones here, not the deep one. On the post-crisis cohort
+deviation of the baseline's own training variability: here the classical models
+are the unstable ones. On the post-crisis cohort
 the ordering reverses: 0.7280 against 0.7372, a difference of $-0.0091$ that is
 also significant (Table~\ref{tab:sig}) and, with every training standard
 deviation below 0.0022 in that cohort, comfortably outside the noise. The calibration comparison does not
-reverse. In both cohorts DeepHit's integrated calibration index is 0.0040 worse
+reverse. In both cohorts DeepHit's calibration index is 0.0040 worse
 than Cox's, so the regime that decides whether the deep model ranks better does
-not change the fact that its probabilities are further from observed
-frequencies (Fig.~\ref{fig:calib}, left). The figure also shows an effect no
-model escapes: trained on 2005--06 and tested on 2007--09, every curve lies above
-the diagonal, so all three under-predict default risk out of time. Calibration
-here is limited less by model class than by the vintage shift itself.
+not change the direction of the calibration gap (Fig.~\ref{fig:calib}, left). The
+two cohorts carry it with very different force: post-crisis the gap is about
+eighteen times the combined training variability of the two models, on crisis
+data only about 1.7 times it. The sign replicates; the size does not. Calibration here is limited less by
+model class than by the vintage shift itself.
 
 
 \begin{figure*}[t]
@@ -295,12 +304,10 @@ here is limited less by model class than by the vintage shift itself.
 \caption{Calibration at 60 months on the crisis cohort (train 2005--06, test
 2007--09). Each point is a decile of predicted risk; the vertical axis is the
 Aalen--Johansen estimate within that decile, so competing events and censoring
-are both accounted for. A perfectly calibrated model lies on the diagonal. Every
-curve lies above it: trained on 2005--06 and tested on 2007--09, all three models
-under-predict risk, and no model corrects for the shift. The two panels differ in
-degree rather than kind --- the deciles separate by a few percentage points for
-default but by twenty or more for prepayment, the competing event that the credit
-literature most often censors.}
+are both accounted for. A model on the diagonal is perfectly calibrated;
+every curve lies above it, so all three under-predict out of time. The deciles
+separate by a few percentage points for default and by twenty or more for
+prepayment, the competing event the credit literature most often censors.}
 \label{fig:calib}
 \end{figure*}
 
@@ -316,7 +323,7 @@ on crisis data and $p=0.788$ post-crisis, and both differences fall inside
 DeepHit's own seed variation. These are among the few comparisons in this study
 where we fail to reject, and they matter: whatever the deep model captures, a
 forest captures as well. On prepayment in the crisis cohort the forest is
-distinctly better, reaching an AUC of 0.685 against 0.620 and an integrated
+distinctly better, reaching an AUC of 0.685 against 0.620 and a
 calibration index of 0.154 against 0.236. The competing event, which the credit
 literature most often censors, is where the gap between the two is widest
 (Fig.~\ref{fig:calib}, right).
@@ -365,9 +372,8 @@ probability-accuracy criterion, and we did not confirm it. Of four
 model-by-cohort comparisons, three produce differences smaller than twice
 DeepHit's seed-to-seed variation, including every post-crisis comparison. The
 one robust effect is a $+0.0101$ AUC gain in the crisis cohort for the
-configuration chosen on AUC, which is selection behaving as intended rather than
-evidence of a trade-off. On this evidence the selection criterion does not drive
-the calibration gap.
+configuration chosen on AUC, which is selection behaving as intended. The
+selection criterion does not drive the calibration gap.
 
 \input{tab_sig}
 
@@ -380,7 +386,7 @@ competing-risks probabilities while preserving discrimination, we applied a
 marginal per-horizon rescaling in that spirit, estimating it two ways
 (Table~\ref{tab:recal}). Fitted on the training vintages, which is all a lender
 has when scoring a new loan, it changes almost nothing: in ten of sixteen cells
-it leaves the integrated calibration index worse than the raw predictions. Fitted
+it leaves the calibration index worse than the raw predictions. Fitted
 instead on the test vintages --- an oracle no lender could build --- it reduces
 the index by a median factor of 4.2, reaching 14.7 for the forest on crisis
 prepayment, where the index falls from 0.154 to 0.031. The single exception is
@@ -401,13 +407,11 @@ open problem rather than a step we omitted.
 %   benchmarking literature omits this.
 The models span three orders of magnitude in training cost. On 150{,}000 loans,
 Fine--Gray fits in 0.03 seconds and the cause-specific Cox model in 0.42, against
-36 seconds for the forest and 59 for DeepHit. Tuning widens the gap further: the
-twenty-configuration DeepHit search cost 14.4 minutes of fitting per the two
-cohorts combined, and the eight-configuration forest search 4.1 minutes, while
-the classical models have no comparable search to run. Since the deep model is
-indistinguishable from the forest and loses to Cox in one of the two regimes,
-that factor of roughly two thousand buys no reliable improvement. We report these
-figures because the benchmarking literature generally omits
+36 seconds for the forest and 59 for DeepHit, and the DeepHit search added 14.4
+minutes of fitting across the two cohorts against 4.1 for the forest. Since the
+deep model is indistinguishable from the forest and loses to Cox in one of the
+two regimes, that factor of roughly two thousand buys no reliable improvement. We
+report these figures because the benchmarking literature generally omits
 them~\cite{wiegrebe2024deep}.
 
 
@@ -432,7 +436,7 @@ them~\cite{wiegrebe2024deep}.
 Taken together these results qualify, rather than contradict, the finding that
 deep competing-risks models perform well on mortgage
 data~\cite{DBLP:journals/jors/BlumenstockLS22}. DeepHit does win on crisis-era
-loans once tuned, and an untuned deep baseline is not evidence of anything. But
+loans once tuned; an untuned deep baseline is not evidence. But
 the win is confined to one regime, disappears against a random survival forest,
 costs three orders of magnitude more compute, and is accompanied by a calibration
 penalty in every condition we tested. For a lender who needs a probability rather
@@ -443,29 +447,24 @@ per-horizon rescaling rather than the per-cause procedures of
 Alberge et al.~\cite{alberge2026calibration}; a stronger correction might close more of the gap,
 though the oracle column suggests the ceiling is set by what is knowable at
 scoring time rather than by the form of the map. Training variability is estimated
-from five bootstrap resamples, which conflates sampling with optimisation noise
-and is a coarse estimate. Our covariates are observed at origination, with
+from five bootstrap resamples and is coarse. Our covariates are observed at origination, with
 no time-varying macroeconomic variables of the kind
 introduced by~Bellotti and Crook~\cite{DBLP:journals/jors/BellottiC09}. The forest is
 cause-specific rather than Ishwaran's competing-risks formulation, and all
 results come from a single family of US agency mortgages. Finally, with 150{,}000
 test subjects almost any difference attains significance, which is why we report
-effect sizes against seed variation throughout; several statistically significant
-differences in Table~\ref{tab:sig} are practically negligible.
-Under one protocol that measures ranking, calibration and cost together on
-vintage-ordered splits, deep competing-risks models offer no reliable advantage
-over classical or tree-based baselines on mortgage data, are consistently worse
-calibrated, and depend on the economic regime for whatever advantage they do
-show. The loss weight that distinguishes DeepHit from a likelihood-only model has no
-consistent effect once architecture is held fixed, and the strong effect visible
-in a pooled hyperparameter search does not survive controlled variation.
+effect sizes against seed variation throughout.
+One result generalises beyond this benchmark. The loss weight that distinguishes
+DeepHit from a likelihood-only model has no consistent effect once architecture is
+held fixed, and the strong effect visible in a pooled hyperparameter search does
+not survive controlled variation: a marginal taken over a random search is not an
+ablation, whatever the model.
 
 \section*{Code and Data}
 % Lecture 8: "Make code available publicly."
-Code for the data pipeline, models, metrics and all experiments is available at
-\url{https://github.com/ar-sadraei/rtds-project}. The Freddie Mac Single-Family Loan-Level Dataset is
-free for academic use but requires registration and therefore cannot be
-redistributed; the pipeline reproduces our tables from the downloaded archives.
+Pipeline, models, metrics and experiments:
+\url{https://github.com/ar-sadraei/rtds-project}. The Freddie Mac data are free
+for academic use but cannot be redistributed; the pipeline rebuilds every table.
 
 % The scaffold cites nothing yet (citations live in the section comments), so the
 % bibliography is seeded with \nocite to keep the build valid. DELETE this block

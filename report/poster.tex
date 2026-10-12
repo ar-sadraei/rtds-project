@@ -8,7 +8,7 @@
 %  report, then update here.
 %
 %  THIS IS THE THING YOU STAND NEXT TO. Whoever presents has to answer
-%  "what is an integrated calibration index?" and "why is the Fine-Gray risk
+%  "what is the calibration index here?" and "why is the Fine-Gray risk
 %  set weighted that way?" without the poster's help. Rewrite the wording so
 %  it is yours before you print it.
 % =====================================================================
@@ -107,8 +107,8 @@ Crisis & 2005--06 & 2007--09 \\
 
 \vspace{3mm}
 Dirick et al.\ report 20--85\% and 94.56--98.16\% across ten European
-consumer-credit portfolios. Our figures fall inside both ranges on US mortgages
-from a later decade.
+consumer-credit portfolios. Ours sit at the lower edge of the first and inside
+the second, on US mortgages from a later decade.
 \end{panel}
 
 \begin{panel}{Protocol}
@@ -123,7 +123,7 @@ survival forest, DeepHit
 \textbf{Ranking} \ IPCW time-dependent AUC
 
 \vspace{1mm}
-\textbf{Calibration} \ integrated calibration index, integrated Brier
+\textbf{Calibration} \ decile calibration index, integrated Brier
 
 \vspace{1mm}
 \textbf{Cost} \ fit and predict seconds
@@ -157,14 +157,15 @@ Difference & $+0.0192$ & $-0.0091$ \\
 \end{tabular}
 
 \vspace{5mm}
-Both are significant under the paired bootstrap. The crisis win is
-harder to read than it looks: refitting Cox on resamples of its own training
-vintages moves its AUC by $\pm0.0159$, against 0.0035 for DeepHit. Here the
-classical models are the less stable ones.
+Both are significant. The crisis win is harder to read than it looks: refitting
+Cox on resamples of its own training vintages moves its AUC by $\pm0.0159$,
+against 0.0035 for DeepHit. Here the classical models are the less stable ones.
 
 \vspace{4mm}
-Calibration behaves the same way in both regimes: DeepHit's calibration index is
-0.0040 worse than Cox's in each.
+DeepHit's calibration index is 0.0040 worse than Cox's in both regimes, but the
+cohorts carry that differently: post-crisis the gap is about eighteen times the
+combined training variability, on crisis data only 1.7 times. The sign
+replicates, the size does not.
 \end{panel}
 
 \begin{panel}{2. DeepHit against a random forest}
@@ -223,10 +224,10 @@ Recalibrated (oracle) & \textbf{0.0053} & \textbf{0.0082} \\
 \end{tabular}
 
 \vspace{5mm}
-We estimated a per-horizon rescaling two ways. Fitted on the training
-vintages, which is what a lender has at scoring time, it changes very little and
-in 10 of 16 cells makes calibration worse. Fitted on the test vintages it cuts
-the error by a median factor of 4.2.
+We estimated a per-horizon rescaling two ways. Fitted on the training vintages,
+all a lender has at scoring time, it changes very little and in 10 of 16 cells
+makes calibration worse. Fitted on the test vintages it cuts the error by a
+median factor of 4.2.
 
 \vspace{4mm}
 \textbf{It works when it is estimated on the vintages it will be applied to, and

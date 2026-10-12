@@ -22,7 +22,9 @@ Metric families, matching the three axes of the review:
 
 Censoring is handled by inverse probability of censoring weights throughout, with
 G(t) the Kaplan-Meier estimate of the censoring distribution fitted on the
-*training* set and applied to the test set.
+*training* set and applied to the test set. On this data G(60) = 0.9986, so those
+weights are all close to one: it is the competing event, not censoring, that
+shapes the results.
 
 NOT IMPLEMENTED: a per-cause D-calibration. Alberge et al. (2026) introduce one;
 Ali has read that paper and should add it here. Deliberately left out rather than
@@ -126,19 +128,36 @@ def auc_td(risk: np.ndarray, time: np.ndarray, event: np.ndarray, cause: int,
              competing event by the horizon -- they can never have cause k, so they
              belong in the control set when the prediction target is the CIF
 
-    Weights: cases by 1/G(T_i-), controls by 1/G(horizon).
+    Weights follow Blanche et al. (2013). A case is weighted by 1/G(T_i-). The two
+    kinds of control are weighted differently, and the distinction matters: a
+    subject still event-free at the horizon is known to be a control because they
+    survived uncensored to the horizon, so the weight is 1/G(horizon), while a
+    subject who had the competing event at T_i <= horizon is known to be a control
+    only because they were uncensored up to T_i, so the weight is 1/G(T_i-).
+
+    Giving every control 1/G(horizon) -- which this function did until the audit of
+    12 Oct 2026 -- over-weights the competing-event controls by G(T_i-)/G(horizon).
+    On this data G(60) = 0.9986, so the correction moved no reported figure by as
+    much as 1e-4; see AUDIT.md. brier_cr has always made the same distinction.
     """
     is_case = (time <= horizon) & (event == cause)
-    is_ctrl = (time > horizon) | ((time <= horizon) & (event != cause) & (event != CENSORED))
+    ctrl_free = time > horizon
+    ctrl_comp = (time <= horizon) & (event != cause) & (event != CENSORED)
+    is_ctrl = ctrl_free | ctrl_comp
 
     if is_case.sum() == 0 or is_ctrl.sum() == 0:
         return float("nan")
 
+    g_at_h = max(_step_eval(g_t, g_v, np.array([horizon]))[0], 1e-8)
     w_case = 1.0 / np.clip(_step_eval(g_t, g_v, time[is_case] - 1e-9), 1e-8, None)
-    w_ctrl = np.full(is_ctrl.sum(), 1.0 / max(_step_eval(g_t, g_v, np.array([horizon]))[0], 1e-8))
+
+    w_all = np.zeros_like(np.asarray(time, dtype=float))
+    w_all[ctrl_free] = 1.0 / g_at_h
+    w_all[ctrl_comp] = 1.0 / np.clip(
+        _step_eval(g_t, g_v, time[ctrl_comp] - 1e-9), 1e-8, None)
 
     rc, wc = risk[is_case], w_case
-    rk, wk = risk[is_ctrl], w_ctrl
+    rk, wk = risk[is_ctrl], w_all[is_ctrl]
 
     # Weighted Mann-Whitney U in O(n log n): for each case, accumulate the control
     # weight strictly below its risk, plus half the weight tied with it.

@@ -36,8 +36,17 @@ Tuned DeepHit vs cause-specific Cox, AUC at 60 months, default:
 
 **Caveat that matters** (see finding 8): the crisis gap of +0.0192 is barely one standard deviation of the Cox model's *own* training variability in that cohort (±0.0159). The post-crisis result is clean — every training SD there is below 0.0022.
 
-### 5. The calibration penalty does *not* reverse
+### 5. The calibration penalty does *not* reverse — but only the sign replicates
 ICI is **+0.0040 worse than Cox in both cohorts**. Whatever the regime, the deep model's probabilities sit further from observed frequencies.
+
+**Caveat added by the audit of 12 Oct.** Measured against the two models' combined training variability, the two cohorts carry this very differently:
+
+| cohort | Cox ICI sd | DeepHit ICI sd | combined | +0.0040 is |
+|---|---|---|---|---|
+| post-crisis | 0.0001 | 0.0002 | 0.0002 | **17.7 σ** |
+| crisis | 0.0020 | 0.0012 | 0.0023 | **1.7 σ** |
+
+The direction holds in both, which is what "does not reverse" claims. The crisis *magnitude* is about as weakly supported as the crisis AUC win in finding 4, and now carries the same hedge in the report.
 
 ### 6. Nothing is gained over a random survival forest
 AUC statistically indistinguishable: **p = 0.968** (crisis), **p = 0.788** (post-crisis), both inside seed noise. On **crisis prepayment** the forest is clearly better: AUC 0.685 vs 0.620, ICI 0.154 vs 0.236.
@@ -120,6 +129,9 @@ Fine–Gray 0.03 s, Cox 0.42 s, RSF 36 s, DeepHit 59 s per fit on 150,000 loans 
 5. **No per-cause calibration measure implemented.** Alberge's CR-D-calibration and cal-αK-calibration exist and would be the right addition.
 6. **With 150,000 test subjects almost everything is "significant".** Effect sizes against training noise are what matter.
 7. **Our RSF is cause-specific**, not Ishwaran's competing-risks formulation used by Frydman & Matuszyk.
+8. **The bootstrap cannot resolve p below 1/500.** 31 of the 36 computed tests sit on that floor; they are reported as `< 0.002`. Bonferroni was applied within a family of three metrics, not across all 36 tests. Neither touches the negative findings, which rest on p = 0.968 and 0.788.
+9. **Our calibration index is decile-binned**, not the smoothed integrated calibration index of Austin & Steyerberg (2019) or its competing-risks form (Austin et al. 2022). The report now says so and cites both.
+10. **Censoring is nearly absent at the horizons we evaluate.** G(60) = 0.9986 in both cohorts, so the IPCW weights are all near one. The competing risk, not censoring, is what shapes these results — see `AUDIT.md`.
 
 ---
 
