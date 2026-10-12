@@ -7,7 +7,8 @@ import sys, pandas as pd, numpy as np
 sys.path.insert(0,"src")
 OUT = "report"
 
-def emit(name, lines, caption="", label="", colspec="", header="", wide=False):
+def emit(name, lines, caption="", label="", colspec="", header="", wide=False,
+         colsep=None):
     """
     Write a COMPLETE table environment.
 
@@ -17,14 +18,19 @@ def emit(name, lines, caption="", label="", colspec="", header="", wide=False):
     """
     body = "\n".join(l.rstrip() for l in lines).rstrip()
     env = "table*" if wide else "table"
+    # A few tables run 8-10pt past the IEEE column. Tightening the inter-column
+    # padding inside the float (where it is local) pulls them back in without
+    # shrinking the type or widening the float.
+    sep = f"\\setlength{{\\tabcolsep}}{{{colsep}}}\n" if colsep else ""
     tex = (f"\\begin{{{env}}}[t]\n\\caption{{{caption}}}\n\\label{{{label}}}\n"
-           f"\\centering\\footnotesize\n\\begin{{tabular}}{{{colspec}}}\n\\toprule\n"
+           f"\\centering\\footnotesize\n{sep}\\begin{{tabular}}{{{colspec}}}\n\\toprule\n"
            f"{header}\n\\midrule\n{body}\n\\bottomrule\n"
            f"\\end{{tabular}}\n\\end{{{env}}}\n")
     open(f"{OUT}/{name}.tex", "w").write(tex)
 
 NICE = {"aalen_johansen":"Aalen--Johansen","cause_specific_cox":"Cox",
-        "fine_gray":"Fine--Gray","rsf":"RSF","deephit_a0.2":r"DeepHit $\alpha{=}0.2$",
+        "fine_gray":"Fine--Gray","rsf":"RSF","deephit":"DeepHit",
+        "deephit_a0.2":r"DeepHit $\alpha{=}0.2$",
         "deephit_a0.5":r"DeepHit $\alpha{=}0.5$","deephit_a1":r"DeepHit $\alpha{=}1$",
         "deephit_sel_auc":"DeepHit (tuned)","deephit_sel_ibs":"DeepHit (sel.\\ IBS)",
         "rsf_sel_auc":"RSF (tuned)","rsf_sel_ibs":"RSF (sel.\\ IBS)"}
@@ -64,7 +70,7 @@ emit("tab_main", lines,
      caption=("Discrimination (AUC at 60 months) and calibration (ICI at 60 months) for "
               "default, on the held-out test vintages of each cohort. Lower ICI is better."),
      label="tab:main", colspec="@{}lrrrr@{}",
-     header=(r"& \multicolumn{2}{c}{Crisis (test 2007--09)} & \multicolumn{2}{c}{Post-crisis (test 2016--18)} \\"
+     header=(r"& \multicolumn{2}{c}{Crisis (2007--09)} & \multicolumn{2}{c}{Post-crisis (2016--18)} \\"
              "\n" r"\cmidrule(lr){2-3}\cmidrule(lr){4-5}" "\n" r"Model & AUC & ICI & AUC & ICI \\"))
 
 # ---------- T3: significance, tuned --------------------------------------
@@ -85,7 +91,8 @@ emit("tab_sig", lines,
               "\\textbf{*} significant at the Bonferroni level $0.05/3$; "
               "$\\dagger$ difference smaller than twice DeepHit's seed-to-seed SD."),
      label="tab:sig", colspec="@{}lllrlrl@{}",
-     header=r"Test & Cohort & Metric & Diff & 95\% CI & $p$ & \\")
+     header=r"Test & Cohort & Metric & Diff & 95\% CI & $p$ & \\",
+     colsep="4pt")
 
 # ---------- T4: alpha ABLATION (replaces the pooled tuning marginal) ------
 ab = pd.read_csv("results/alpha_ablation.csv")
@@ -115,7 +122,9 @@ g = v.groupby(["dataset","model"])[["auc","ici"]].agg(["mean","std"])
 lines=[]
 # crisis only: every post-crisis SD is <= 0.0022 and the prose says so, so the
 # second half of the table carried no information worth the space.
-for (ds,m),r in g.iterrows():
+ORDER = ["cause_specific_cox", "fine_gray", "rsf", "deephit"]
+for (ds,m),r in sorted(g.iterrows(),
+                       key=lambda kv: ORDER.index(kv[0][1]) if kv[0][1] in ORDER else 99):
     if ds != "crisis":
         continue
     lines.append(f"{NICE.get(m, m.replace(chr(95), chr(92)+chr(95)))} & "
@@ -149,7 +158,8 @@ emit("tab_recal", lines,
               "AUC is identical to four decimals for raw and recalibrated "
               "predictions in all sixteen cells, confirming the rescaling is monotone."),
      label="tab:recal", colspec="@{}lllrrr@{}",
-     header=r"Cohort & Cause & Model & Raw & Recal.\ (train) & Recal.\ (oracle) \\")
+     header=r"Cohort & Cause & Model & Raw & Recal.\ train & Recal.\ oracle \\",
+     colsep="4pt")
 
 print("wrote report/tab_{data,main,sig,alpha,var,recal}.tex")
 for f in ["tab_data","tab_main","tab_sig","tab_alpha","tab_var","tab_recal"]:

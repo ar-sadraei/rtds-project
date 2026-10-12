@@ -139,6 +139,6 @@ All three were caught by checks rather than luck, which is itself an argument fo
 
 ## Where this leaves the paper
 
-> On mortgage data, under one protocol with time-ordered splits and an equal tuning budget, deep competing-risks models offer no reliable advantage over classical or tree-based baselines, are consistently worse calibrated, cost roughly 2,000× more to fit, and and the strong effect their loss weight appears to have in a pooled hyperparameter search does not survive controlled variation. The calibration gap is not a correctable artefact of the model but a consequence of the regime shift between origination vintages.
+> On mortgage data, under one protocol with time-ordered splits and an equal tuning budget, deep competing-risks models offer no reliable advantage over classical or tree-based baselines, are consistently worse calibrated, cost roughly 2,000× more to fit, and the strong effect their loss weight appears to have in a pooled hyperparameter search does not survive controlled variation. The calibration gap is not a correctable artefact of the model but a consequence of the regime shift between origination vintages.
 
 It engages all three reviews: Filip's tuning-budget and cost gap, Ali's calibration measures, Amirreza's competing-risks credit setting.

@@ -57,7 +57,10 @@ for ax,(cause,label) in zip(axes, [(DEFAULT,"Default"),(PREPAID,"Prepayment")]):
     ax.set_xlim(0,lim); ax.set_ylim(0,lim); ax.set_aspect("equal")
     ax.set_xlabel("Predicted cumulative incidence")
     ax.set_title(f"{label} at 60 months", fontsize=8.5)
-    ax.legend(frameon=False, loc="upper left")
+    # At upper left the legend sits on top of the curves and the diagonal runs
+    # through its text. Every curve lies above the diagonal, so the lower-right
+    # wedge is the one empty region of the panel: put it there, unframed.
+    ax.legend(loc="lower right", frameon=False)
     ax.spines[["top","right"]].set_visible(False)
 axes[0].set_ylabel("Observed (Aalen\u2013Johansen)")
 fig.tight_layout(pad=0.4)
