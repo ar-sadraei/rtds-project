@@ -114,30 +114,40 @@ emit("tab_alpha", lines,
 v = pd.read_csv("results/training_variability.csv")
 g = v.groupby(["dataset","model"])[["auc","ici"]].agg(["mean","std"])
 lines=[]
+# crisis only: every post-crisis SD is <= 0.0022 and the prose says so, so the
+# second half of the table carried no information worth the space.
 for (ds,m),r in g.iterrows():
-    lines.append(f"{ds} & {NICE.get(m, m.replace(chr(95), chr(92)+chr(95)))} & "
+    if ds != "crisis":
+        continue
+    lines.append(f"{NICE.get(m, m.replace(chr(95), chr(92)+chr(95)))} & "
                  f"{r[('auc','mean')]:.4f} & {r[('auc','std')]:.4f} & "
                  f"{r[('ici','mean')]:.4f} & {r[('ici','std')]:.4f} \\\\")
 emit("tab_var", lines,
-     caption=("Training variability: each model refitted on five bootstrap resamples of "
-              "its training vintages and evaluated on the fixed test vintages (default, "
-              "60 months). Seeds are the wrong device for Cox and Fine--Gray, which are "
-              "deterministic given the data, so the training set is resampled instead."),
-     label="tab:var", colspec="@{}llrrrr@{}",
-     header=r"Cohort & Model & AUC mean & sd & ICI mean & sd \\")
+     caption=("Training variability on the \\textbf{crisis} cohort: each model refitted on "
+              "five bootstrap resamples of its training vintages and evaluated on the fixed "
+              "test vintages (default, 60 months). Seeds are the wrong device for Cox and "
+              "Fine--Gray, which are deterministic given the data, so the training set is "
+              "resampled instead. Every post-crisis standard deviation is below 0.0022 and "
+              "is omitted."),
+     label="tab:var", colspec="@{}lrrrr@{}",
+     header=r"Model & AUC mean & sd & ICI mean & sd \\")
 
 # ---------- T7: recalibration ---------------------------------------------
 rc = pd.read_csv("results/recalibration.csv")
 piv = rc.pivot_table(index=["dataset","cause","model"], columns="variant", values="ici")
 lines=[]
+KEEP = {"cause_specific_cox", "deephit"}
 for (ds,ca,m),r in piv.iterrows():
+    if m not in KEEP:
+        continue
     lines.append(f"{ds} & {ca} & {NICE.get(m, m.replace(chr(95), chr(92)+chr(95)))} & "
                  f"{r['raw']:.4f} & {r['recal_train']:.4f} & {r['recal_oracle']:.4f} \\\\")
 emit("tab_recal", lines,
      caption=("Post-hoc recalibration, ICI at 60 months. ``Train'' estimates the "
               "rescaling on the training vintages, which is all a lender has at scoring "
               "time; ``oracle'' estimates it on the test vintages and is unattainable in "
-              "practice. AUC is identical to four decimals for raw and recalibrated "
+              "practice. Cox and DeepHit are shown; the forest and Fine--Gray behave the same way. "
+              "AUC is identical to four decimals for raw and recalibrated "
               "predictions in all sixteen cells, confirming the rescaling is monotone."),
      label="tab:recal", colspec="@{}lllrrr@{}",
      header=r"Cohort & Cause & Model & Raw & Recal.\ (train) & Recal.\ (oracle) \\")

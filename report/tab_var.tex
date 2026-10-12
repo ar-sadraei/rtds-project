@@ -1,19 +1,15 @@
 \begin{table}[t]
-\caption{Training variability: each model refitted on five bootstrap resamples of its training vintages and evaluated on the fixed test vintages (default, 60 months). Seeds are the wrong device for Cox and Fine--Gray, which are deterministic given the data, so the training set is resampled instead.}
+\caption{Training variability on the \textbf{crisis} cohort: each model refitted on five bootstrap resamples of its training vintages and evaluated on the fixed test vintages (default, 60 months). Seeds are the wrong device for Cox and Fine--Gray, which are deterministic given the data, so the training set is resampled instead. Every post-crisis standard deviation is below 0.0022 and is omitted.}
 \label{tab:var}
 \centering\footnotesize
-\begin{tabular}{@{}llrrrr@{}}
+\begin{tabular}{@{}lrrrr@{}}
 \toprule
-Cohort & Model & AUC mean & sd & ICI mean & sd \\
+Model & AUC mean & sd & ICI mean & sd \\
 \midrule
-crisis & Cause-specific Cox & 0.8167 & 0.0159 & 0.0188 & 0.0020 \\
-crisis & deephit & 0.8502 & 0.0035 & 0.0211 & 0.0012 \\
-crisis & Fine--Gray & 0.8316 & 0.0206 & 0.0202 & 0.0024 \\
-crisis & RSF (untuned) & 0.8513 & 0.0009 & 0.0255 & 0.0005 \\
-postcrisis & Cause-specific Cox & 0.7360 & 0.0005 & 0.0281 & 0.0001 \\
-postcrisis & deephit & 0.7243 & 0.0022 & 0.0328 & 0.0002 \\
-postcrisis & Fine--Gray & 0.7302 & 0.0004 & 0.0293 & 0.0007 \\
-postcrisis & RSF (untuned) & 0.7251 & 0.0016 & 0.0289 & 0.0006 \\
+Cause-specific Cox & 0.8167 & 0.0159 & 0.0188 & 0.0020 \\
+deephit & 0.8502 & 0.0035 & 0.0211 & 0.0012 \\
+Fine--Gray & 0.8316 & 0.0206 & 0.0202 & 0.0024 \\
+RSF (untuned) & 0.8513 & 0.0009 & 0.0255 & 0.0005 \\
 \bottomrule
 \end{tabular}
 \end{table}

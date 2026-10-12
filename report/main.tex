@@ -330,12 +330,10 @@ literature most often censors, is where the gap between the two is widest
 DeepHit's loss is a convex combination $\alpha\cdot$likelihood
 $+\,(1-\alpha)\cdot$ranking, and the original model selects this weight on
 validation discrimination~\cite{DBLP:conf/aaai/LeeZYS18}. Pooling our forty
-tuning configurations by $\alpha$ suggests a strong monotone effect, with mean
-validation AUC rising from 0.658 at $\alpha=0.1$ to 0.776 at $\alpha=1.0$. That
-apparent effect does not survive control. In the search, $\alpha$ varied
-alongside depth, dropout, learning rate, batch size and bin count, so the
-marginal confounds the loss weight with the architectures it happened to be drawn
-with.
+tuning configurations by $\alpha$ suggests a strong monotone effect, mean
+validation AUC rising from 0.658 at $\alpha=0.1$ to 0.776 at $\alpha=1.0$, but
+that is a marginal over a search in which $\alpha$ varied alongside depth,
+dropout, learning rate, batch size and bin count, and it does not survive control.
 
 Holding everything else fixed and varying only $\alpha$, over five seeds and both
 cohorts, the effect is small and inconsistent in sign (Table~\ref{tab:alpha}). On
