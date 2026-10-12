@@ -129,8 +129,8 @@ Two recent reviews bracket this problem without meeting in the middle.
 Shang et al.~\cite{shang2024survival} survey three decades of survival analysis in
 credit risk but do not examine how the resulting predictions are checked.
 Wiegrebe et al.~\cite{wiegrebe2024deep} review more than fifty deep learning methods
-for time-to-event data and observe that most handle only a single risk; they
-consider no credit application. Neither asks whether credit
+for time-to-event data and observe that most handle only a single risk with
+censoring; they consider no credit application. Neither asks whether credit
 models produce faithful probabilities.
 
 On the credit side, the field's benchmark compares eight survival models on ten
@@ -180,7 +180,8 @@ counting prepayment as an event leaves 20.6\% of loans censored, while censoring
 it leaves 95.5\%. Dirick et al.~\cite{DBLP:journals/jors/DirickCB17} report 20--85\% and
 94.56--98.16\% on ten European consumer-credit portfolios; ours sit at the lower
 edge of the first range and inside the second, on a different product, country
-and decade. Prepayment outnumbers default seventeen to one.
+and decade. Prepayment is not a nuisance here but the dominant outcome,
+outnumbering default seventeen to one.
 
 \input{tab_data}
 
@@ -246,8 +247,8 @@ trains on 2013--2015 and tests on 2016--2018; the crisis cohort trains on
 2005--2006 and tests on 2007--2009. Hyperparameters were searched with a budget
 fixed in advance: twenty random configurations for DeepHit and eight for the
 forest, scored on an out-of-time validation vintage held inside the training
-years, so test vintages were never touched during tuning. Cox and Fine--Gray are
-reported untuned. Each configuration was scored on validation AUC and on
+years, so test vintages were never touched during tuning. Cox and Fine--Gray have no comparable
+hyperparameters and are reported untuned. Each configuration was scored on validation AUC and on
 validation integrated Brier score, and the winner under each criterion was
 refitted and evaluated separately.
 
@@ -294,8 +295,9 @@ than Cox's, so the regime that decides whether the deep model ranks better does
 not change the direction of the calibration gap (Fig.~\ref{fig:calib}, left). The
 two cohorts carry it with very different force: post-crisis the gap is about
 eighteen times the combined training variability of the two models, on crisis
-data only about 1.7 times it. The sign replicates; the size does not. Calibration here is limited less by
-model class than by the vintage shift itself.
+data only about 1.7 times it. The sign replicates; the size does not. Every curve in that figure lies above
+the diagonal, so calibration here is limited less by model class than by the
+vintage shift itself.
 
 
 \begin{figure*}[t]
@@ -321,7 +323,7 @@ Against a tuned random survival forest, DeepHit offers nothing. The two are
 statistically indistinguishable on discrimination in both cohorts, with $p=0.968$
 on crisis data and $p=0.788$ post-crisis, and both differences fall inside
 DeepHit's own seed variation. These are among the few comparisons in this study
-where we fail to reject, and they matter: whatever the deep model captures, a
+where we fail to reject: whatever the deep model captures, a
 forest captures as well. On prepayment in the crisis cohort the forest is
 distinctly better, reaching an AUC of 0.685 against 0.620 and a
 calibration index of 0.154 against 0.236. The competing event, which the credit
@@ -352,11 +354,11 @@ post-crisis prepayment, removing it \emph{improves} both. Of the four
 cause-by-cohort cells, three show a discrimination effect larger than seed noise
 and they do not agree on direction.
 
-Two things follow. The loss weight is not the dominant hyperparameter the pooled
-view suggested, and no setting of it can be recommended from these data. More
-usefully, the discrepancy between the two views is itself a result: a marginal
-taken over a random search is not an ablation, and reading one as the other is how
-a hyperparameter acquires a reputation it has not earned.
+The loss weight is therefore not the dominant hyperparameter the pooled view
+suggested, and no setting of it can be recommended from these data. The
+discrepancy between the two views is itself a result: a marginal
+taken over a random search is not an ablation, and reading one as the other is
+how a hyperparameter acquires a reputation it has not earned.
 
 \input{tab_alpha}
 
@@ -388,16 +390,14 @@ marginal per-horizon rescaling in that spirit, estimating it two ways
 has when scoring a new loan, it changes almost nothing: in ten of sixteen cells
 it leaves the calibration index worse than the raw predictions. Fitted
 instead on the test vintages --- an oracle no lender could build --- it reduces
-the index by a median factor of 4.2, reaching 14.7 for the forest on crisis
-prepayment, where the index falls from 0.154 to 0.031. The single exception is
-the forest on crisis default, which the oracle leaves unchanged. Discrimination is unchanged to four decimals
-throughout, confirming the rescaling is monotone.
+the index by a median factor of 4.2, reaching 14.7 for Fine--Gray on post-crisis
+default. The single exception is
+the forest on crisis default, which the oracle leaves unchanged.
 
 The contrast identifies what the calibration penalty actually is. It is not a
 defective calibration map, or the oracle correction would not work so well. It is
 the vintage shift itself: a rescaling estimated on 2005--06 cannot know that
-2007--09 would turn out worse, so the error is correctable in principle and
-unavailable in practice. Recalibration as demonstrated in the literature is an
+2007--09 would turn out worse. Recalibration as demonstrated in the literature is an
 in-distribution procedure, and extending it across origination vintages is an
 open problem rather than a step we omitted.
 
@@ -408,8 +408,8 @@ open problem rather than a step we omitted.
 The models span three orders of magnitude in training cost. On 150{,}000 loans,
 Fine--Gray fits in 0.03 seconds and the cause-specific Cox model in 0.42, against
 36 seconds for the forest and 59 for DeepHit, and the DeepHit search added 14.4
-minutes of fitting across the two cohorts against 4.1 for the forest. Since the
-deep model is indistinguishable from the forest and loses to Cox in one of the
+minutes of fitting across the two cohorts and the forest search 4.1, while the
+classical models have no search to run. Since the deep model is indistinguishable from the forest and loses to Cox in one of the
 two regimes, that factor of roughly two thousand buys no reliable improvement. We
 report these figures because the benchmarking literature generally omits
 them~\cite{wiegrebe2024deep}.
@@ -447,24 +447,29 @@ per-horizon rescaling rather than the per-cause procedures of
 Alberge et al.~\cite{alberge2026calibration}; a stronger correction might close more of the gap,
 though the oracle column suggests the ceiling is set by what is knowable at
 scoring time rather than by the form of the map. Training variability is estimated
-from five bootstrap resamples and is coarse. Our covariates are observed at origination, with
+from five bootstrap resamples, which conflates sampling with optimisation
+noise. Our covariates are observed at origination, with
 no time-varying macroeconomic variables of the kind
 introduced by~Bellotti and Crook~\cite{DBLP:journals/jors/BellottiC09}. The forest is
 cause-specific rather than Ishwaran's competing-risks formulation, and all
 results come from a single family of US agency mortgages. Finally, with 150{,}000
 test subjects almost any difference attains significance, which is why we report
 effect sizes against seed variation throughout.
-One result generalises beyond this benchmark. The loss weight that distinguishes
-DeepHit from a likelihood-only model has no consistent effect once architecture is
-held fixed, and the strong effect visible in a pooled hyperparameter search does
-not survive controlled variation: a marginal taken over a random search is not an
-ablation, whatever the model.
+
+Under one protocol measuring ranking, calibration and cost together on
+vintage-ordered splits, deep competing-risks models offer no reliable advantage
+over classical or tree-based baselines on mortgage data, are worse calibrated in
+both regimes, and depend on the regime for whatever ranking advantage they show.
+The result that generalises past this benchmark is methodological: a
+hyperparameter's apparent effect in a pooled search did not survive controlled
+variation.
 
 \section*{Code and Data}
 % Lecture 8: "Make code available publicly."
 Pipeline, models, metrics and experiments:
-\url{https://github.com/ar-sadraei/rtds-project}. The Freddie Mac data are free
-for academic use but cannot be redistributed; the pipeline rebuilds every table.
+\url{https://github.com/ar-sadraei/rtds-project}, which rebuilds every table in
+this paper. The Freddie Mac data require registration and cannot be
+redistributed.
 
 % The scaffold cites nothing yet (citations live in the section comments), so the
 % bibliography is seeded with \nocite to keep the build valid. DELETE this block
