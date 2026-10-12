@@ -85,7 +85,8 @@ Reserves are computed from the numbers.
 \end{panel}
 
 \begin{panel}{Data}
-Freddie Mac Single-Family Loan-Level Dataset, 50{,}000-loan samples per vintage.
+{\raggedright Freddie Mac Single-Family Loan-Level Dataset, 50{,}000-loan
+samples per vintage.\par}
 
 \vspace{4mm}
 \begin{tabular}{@{}lrr@{}}
@@ -173,25 +174,36 @@ Both differences fall inside DeepHit's own seed variation. On crisis
 index 0.154 vs 0.236.
 \end{panel}
 
-\begin{panel}{3. The ranking loss is harmful}
-DeepHit's loss is $\alpha\cdot$likelihood $+\ (1-\alpha)\cdot$ranking. Pooled over
-40 configurations:
+\begin{panel}{3. The loss weight is not a reliable knob}
+DeepHit's loss is $\alpha\cdot$likelihood $+\ (1-\alpha)\cdot$ranking.
+\textbf{Pooled} over our 40 tuning configurations, validation AUC climbs
+$0.658 \rightarrow 0.776$ as $\alpha$ goes $0.1 \rightarrow 1.0$ --- a clean
+monotone story.
+
+\vspace{5mm}
+It does not survive control. Everything else held \textbf{fixed}, five seeds,
+test vintages:
 
 \vspace{4mm}
-\begin{tabular}{@{}lrr@{}}
+\begin{tabular}{@{}llrr@{}}
 \toprule
-$\alpha$ & Val.\ AUC & Val.\ IBS \\
+Cause & Cohort & $\Delta$AUC & seed sd \\
 \midrule
-0.10 & 0.658 & 0.0334 \\
-0.20 \small(library default) & 0.749 & 0.0286 \\
-0.50 & 0.776 & 0.0269 \\
-1.00 \small(no ranking term) & \textbf{0.776} & 0.0271 \\
+Default & crisis & $+0.0075$ & 0.0033 \\
+Default & post & $+0.0005$ & 0.0018 \\
+Prepay & crisis & $\mathbf{-0.0673}$ & 0.0103 \\
+Prepay & post & $\mathbf{+0.0386}$ & 0.0062 \\
 \bottomrule
 \end{tabular}
 
 \vspace{5mm}
-More weight on ranking makes ranking \emph{and} calibration worse, monotonically.
-The reference implementation's default sits inside the harmful range.
+$\Delta$ is $\alpha{=}0.1 \rightarrow \alpha{=}1$. The effect \textbf{reverses
+sign} across causes. There is no $\alpha$ we can recommend.
+
+\vspace{5mm}
+\textbf{A marginal taken over a random search is not an ablation.} In the
+search $\alpha$ varied alongside everything else. We had written the opposite
+conclusion before we ran the controlled version.
 \end{panel}
 
 % ================= COLUMN 3 =================
@@ -217,13 +229,12 @@ itself: correctable in principle, unavailable in practice.}
 \end{panel}
 
 \begin{panel}{Calibration at 60 months, crisis cohort}
-\includegraphics[width=\linewidth]{fig_calibration}
+\includegraphics[width=\linewidth]{fig_calibration_poster}
 
 \vspace{3mm}
 {\fontsize{32}{39}\selectfont Deciles of predicted risk against the
-Aalen--Johansen estimate. Every curve sits above the diagonal: trained on
-2005--06 and tested on 2007--09, \emph{every} model under-predicts. Prepayment,
-the event the credit literature usually censors, is far worse than default.}
+Aalen--Johansen estimate. Trained on 2005--06, tested on 2007--09,
+\emph{every} curve sits above the diagonal --- prepayment worst.}
 \end{panel}
 
 \begin{panel}{Cost}
@@ -237,22 +248,21 @@ Plus 14.4 minutes of hyperparameter search the classical models never need.
 One dataset family. Only five bootstrap replicates per model. Covariates observed
 at origination only --- no time-varying macroeconomic variables. Our recalibration
 is a marginal rescaling, not the per-cause procedures of Alberge et al.\ (2026).
-With 150{,}000 test loans almost any difference is significant, so we report
-effect sizes against training noise throughout.
+With 150{,}000 test loans almost anything is significant, so we report effect
+sizes against training noise.
 \end{panel}
 
 \begin{hilite}
 \begin{center}
 {\fontsize{46}{56}\selectfont\bfseries\color{su}
-The credit models\\[2mm] rank well.\\[5mm]
-Nobody checked whether\\[2mm] their probabilities\\[2mm] were true.}
-\end{center}
-\end{hilite}
+Better ranking\\[2mm] in one regime.\\[5mm]
+Worse probabilities\\[2mm] in all of them.}
 
-\begin{center}
-{\fontsize{32}{39}\selectfont Code: \texttt{github.com/ar-sadraei/rtds-project} \quad\textbullet\quad
+\vspace{6mm}
+{\fontsize{30}{36}\selectfont Code: \texttt{github.com/ar-sadraei/rtds-project}\\[2mm]
 Data: Freddie Mac SFLLD, free on registration}
 \end{center}
+\end{hilite}
 
 \end{multicols}
 \end{document}

@@ -40,9 +40,29 @@ fitted=[]
 for name,m,mk,ls,col in models:
     print("fitting",name,flush=True); m.fit(tr[FEATS], t_tr, e_tr); fitted.append((name,m,mk,ls,col))
 
-plt.rcParams.update({"font.size":8,"axes.labelsize":8,"legend.fontsize":7,
-                     "xtick.labelsize":7,"ytick.labelsize":7,"figure.dpi":200})
-fig, axes = plt.subplots(1,2, figsize=(7.0,3.0))
+# The poster scales this figure to a ~240mm column on an 841mm sheet, about
+# 1.35x, next to 39pt body text. At the report's 8pt the axis labels land near
+# 11pt effective and cannot be read from a metre away.
+#
+# Scaling the canvas with the type does nothing: what reaches the eye is the
+# ratio of type size to figure WIDTH, since the figure is then stretched to the
+# column. So the poster build enlarges the type and leaves the canvas alone.
+POSTER = "--poster" in sys.argv
+S = 2.2 if POSTER else 1.0          # type, lines and markers
+FIGSIZE = (7.0, 4.0) if POSTER else (7.0, 3.0)   # room for the larger type
+# Bigger type only fits if the strings get shorter, so the poster drops the
+# words a reader standing in front of it does not need.
+SHORTNAME = {"Cause-specific Cox":"Cox", "RSF (tuned)":"RSF",
+             "DeepHit (tuned)":"DeepHit"}
+OUTFILE = ("report/fig_calibration_poster.pdf" if POSTER
+           else "report/fig_calibration.pdf")
+
+plt.rcParams.update({"font.size":8*S,"axes.labelsize":8*S,"legend.fontsize":7*S,
+                     "xtick.labelsize":7*S,"ytick.labelsize":7*S,"figure.dpi":200,
+                     "axes.linewidth":0.8*S,
+                     "xtick.major.width":0.8*S,"ytick.major.width":0.8*S,
+                     "xtick.major.size":3.5*S,"ytick.major.size":3.5*S})
+fig, axes = plt.subplots(1,2, figsize=FIGSIZE)
 for ax,(cause,label) in zip(axes, [(DEFAULT,"Default"),(PREPAID,"Prepayment")]):
     hi=0
     for name,m,mk,ls,col in fitted:
@@ -50,19 +70,20 @@ for ax,(cause,label) in zip(axes, [(DEFAULT,"Default"),(PREPAID,"Prepayment")]):
         tab = calibration_table(cif, t_te, e_te, cause, HOR, n_bins=10)
         v = ici(cif, t_te, e_te, cause, HOR)
         ax.plot(tab.predicted, tab.observed, marker=mk, linestyle=ls, color=col,
-                markersize=3.5, linewidth=1.1, label=f"{name} (ICI {v:.3f})")
+                markersize=3.5*S, linewidth=1.1*S, label=(f"{SHORTNAME[name]} ({v:.3f})" if POSTER
+                       else f"{name} (ICI {v:.3f})"))
         hi = max(hi, tab.predicted.max(), tab.observed.max())
     lim = hi*1.08
-    ax.plot([0,lim],[0,lim], color="0.55", linewidth=0.8, dashes=(4,3), zorder=0)
+    ax.plot([0,lim],[0,lim], color="0.55", linewidth=0.8*S, dashes=(4,3), zorder=0)
     ax.set_xlim(0,lim); ax.set_ylim(0,lim); ax.set_aspect("equal")
-    ax.set_xlabel("Predicted cumulative incidence")
-    ax.set_title(f"{label} at 60 months", fontsize=8.5)
+    ax.set_xlabel("Predicted CIF" if POSTER else "Predicted cumulative incidence")
+    ax.set_title(label if POSTER else f"{label} at 60 months", fontsize=8.5*S)
     # At upper left the legend sits on top of the curves and the diagonal runs
     # through its text. Every curve lies above the diagonal, so the lower-right
     # wedge is the one empty region of the panel: put it there, unframed.
     ax.legend(loc="lower right", frameon=False)
     ax.spines[["top","right"]].set_visible(False)
-axes[0].set_ylabel("Observed (Aalen\u2013Johansen)")
+axes[0].set_ylabel("Observed" if POSTER else "Observed (Aalen\u2013Johansen)")
 fig.tight_layout(pad=0.4)
-fig.savefig("report/fig_calibration.pdf", bbox_inches="tight")
-print("wrote report/fig_calibration.pdf")
+fig.savefig(OUTFILE, bbox_inches="tight")
+print("wrote", OUTFILE)
