@@ -49,9 +49,11 @@ for name,m,mk,ls,col in models:
 # column. So the poster build enlarges the type and leaves the canvas alone.
 POSTER = "--poster" in sys.argv
 S = 2.2 if POSTER else 1.0          # type, lines and markers
-FIGSIZE = (7.0, 4.0) if POSTER else (7.0, 3.0)   # room for the larger type
+FIGSIZE = (7.0, 3.4) if POSTER else (7.0, 3.0)   # room for the larger type
 # Bigger type only fits if the strings get shorter, so the poster drops the
-# words a reader standing in front of it does not need.
+# words a reader standing in front of it does not need. The ICI values leave
+# the legend too: at this panel size the legend would sit on the curves, and
+# the poster reports calibration numbers in its own panels anyway.
 SHORTNAME = {"Cause-specific Cox":"Cox", "RSF (tuned)":"RSF",
              "DeepHit (tuned)":"DeepHit"}
 OUTFILE = ("report/fig_calibration_poster.pdf" if POSTER
@@ -70,7 +72,7 @@ for ax,(cause,label) in zip(axes, [(DEFAULT,"Default"),(PREPAID,"Prepayment")]):
         tab = calibration_table(cif, t_te, e_te, cause, HOR, n_bins=10)
         v = ici(cif, t_te, e_te, cause, HOR)
         ax.plot(tab.predicted, tab.observed, marker=mk, linestyle=ls, color=col,
-                markersize=3.5*S, linewidth=1.1*S, label=(f"{SHORTNAME[name]} ({v:.3f})" if POSTER
+                markersize=3.5*S, linewidth=1.1*S, label=(SHORTNAME[name] if POSTER
                        else f"{name} (ICI {v:.3f})"))
         hi = max(hi, tab.predicted.max(), tab.observed.max())
     lim = hi*1.08

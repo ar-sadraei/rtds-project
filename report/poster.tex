@@ -41,12 +41,12 @@
 \newtcolorbox{panel}[1]{
   enhanced, colback=white, colframe=su, boxrule=1.2pt, arc=3mm,
   fonttitle=\bfseries\fontsize{46}{55}\selectfont, coltitle=white,
-  colbacktitle=su, title={#1}, left=6mm, right=6mm, top=5mm, bottom=5mm,
-  before skip=9mm, after skip=9mm}
+  colbacktitle=su, title={#1}, left=6mm, right=6mm, top=4mm, bottom=4mm,
+  before skip=3mm, after skip=3mm}
 
 \newtcolorbox{hilite}{
   enhanced, colback=soft, colframe=accent, boxrule=1.6pt, arc=3mm,
-  left=6mm, right=6mm, top=5mm, bottom=5mm, before skip=9mm, after skip=9mm}
+  left=6mm, right=6mm, top=5mm, bottom=5mm, before skip=3mm, after skip=3mm}
 
 \newcommand{\bignum}[2]{{\fontsize{64}{72}\selectfont\bfseries\color{accent}#1}\\[1mm]{\fontsize{32}{39}\selectfont #2}}
 
@@ -69,19 +69,21 @@ Ranking, Calibration and Cost in\\[3mm] Competing-Risks Survival Models}\\[6mm]
 % ================= COLUMN 1 =================
 \begin{hilite}
 {\fontsize{46}{55}\selectfont\bfseries\color{su} The question}\\[4mm]
-Deep competing-risks models are selected and reported on \textbf{ranking}.
-Lenders act on the \textbf{probability}. Does the advantage survive when the
-probabilities are measured too?
+Deep competing-risks models are usually compared on how well they
+\textbf{rank} borrowers. A lender provisioning against loss needs the
+\textbf{probability}. We tested whether the ranking advantage holds when both
+are measured.
 \end{hilite}
 
 \begin{panel}{Why it matters}
-A mortgage ends by default, prepayment or maturity --- once one happens the
-others cannot. Provisioning needs the chance of default \emph{by each date}, not
-an ordering of borrowers.
+A mortgage ends in one of three ways: default, prepayment or maturity. Once
+one happens the other two cannot, which is what makes this a competing-risks
+problem.
 
 \vspace{4mm}
-A model can rank borrowers perfectly and still attach the wrong numbers to them.
-Reserves are computed from the numbers.
+IFRS 9 requires a probability of default at each future date, and the reserve is
+computed from it. A model can order borrowers correctly and still get those
+probabilities wrong.
 \end{panel}
 
 \begin{panel}{Data}
@@ -104,35 +106,36 @@ Crisis & 2005--06 & 2007--09 \\
 \end{center}
 
 \vspace{3mm}
-Dirick et al.\ report 20--85\% and 94.56--98.16\% on European consumer credit.
-The same effect, on a different product, country and decade.
+Dirick et al.\ report 20--85\% and 94.56--98.16\% across ten European
+consumer-credit portfolios. Our figures fall inside both ranges on US mortgages
+from a later decade.
 \end{panel}
 
 \begin{panel}{Protocol}
-One interface: every model returns a cumulative incidence per cause, so none can
-be given a metric the others cannot.
+Every model returns a cumulative incidence function per cause, so all five are
+scored on all three metrics.
 
 \vspace{4mm}
 \textbf{Models} \ Aalen--Johansen (null), cause-specific Cox, Fine--Gray, random
 survival forest, DeepHit
 
-\vspace{2mm}
+\vspace{1mm}
 \textbf{Ranking} \ IPCW time-dependent AUC
 
-\vspace{2mm}
+\vspace{1mm}
 \textbf{Calibration} \ integrated calibration index, integrated Brier
 
-\vspace{2mm}
+\vspace{1mm}
 \textbf{Cost} \ fit and predict seconds
 
-\vspace{2mm}
+\vspace{1mm}
 \textbf{Splits} \ vintage-ordered, not random
 
-\vspace{2mm}
+\vspace{1mm}
 \textbf{Budget} \ 20 DeepHit configs, 8 forest, fixed in advance, validated
 out-of-time
 
-\vspace{2mm}
+\vspace{1mm}
 \textbf{Inference} \ paired bootstrap, $B{=}500$, two-sided, $\alpha$ fixed at
 0.05, Bonferroni across three metric families
 \end{panel}
@@ -154,35 +157,35 @@ Difference & $+0.0192$ & $-0.0091$ \\
 \end{tabular}
 
 \vspace{5mm}
-Both significant. But the Cox model's own training variability on crisis data is
-$\pm0.0159$, so the win is barely one standard deviation of the baseline's noise
---- the \emph{classical} models are the unstable ones here.
+Both are significant under the paired bootstrap. The crisis win is
+harder to read than it looks: refitting Cox on resamples of its own training
+vintages moves its AUC by $\pm0.0159$, against 0.0035 for DeepHit. Here the
+classical models are the less stable ones.
 
 \vspace{4mm}
-The calibration penalty does \textbf{not} reverse: $+0.0040$ worse than Cox in
-both cohorts.
+Calibration behaves the same way in both regimes: DeepHit's calibration index is
+0.0040 worse than Cox's in each.
 \end{panel}
 
-\begin{panel}{2. No gain over a random forest}
+\begin{panel}{2. DeepHit against a random forest}
 \begin{center}
 \bignum{$p=0.97$ \ \ $p=0.79$}{DeepHit vs tuned random survival forest, AUC,\\crisis and post-crisis}
 \end{center}
 
 \vspace{3mm}
-Both differences fall inside DeepHit's own seed variation. On crisis
-\textbf{prepayment} the forest is clearly better: AUC 0.685 vs 0.620, calibration
-index 0.154 vs 0.236.
+Neither difference reaches significance, and both are smaller than DeepHit's
+spread across seeds. On crisis \textbf{prepayment} the forest is ahead on both,
+0.685 against 0.620 on AUC and 0.154 against 0.236 on calibration.
 \end{panel}
 
-\begin{panel}{3. The loss weight is not a reliable knob}
-DeepHit's loss is $\alpha\cdot$likelihood $+\ (1-\alpha)\cdot$ranking.
-\textbf{Pooled} over our 40 tuning configurations, validation AUC climbs
-$0.658 \rightarrow 0.776$ as $\alpha$ goes $0.1 \rightarrow 1.0$ --- a clean
-monotone story.
+\begin{panel}{3. What the loss weight does}
+DeepHit's loss is $\alpha\cdot$likelihood $+\ (1-\alpha)\cdot$ranking. Averaging
+our 40 tuning configurations by $\alpha$, validation AUC rises from 0.658 at
+$\alpha{=}0.1$ to 0.776 at $\alpha{=}1.0$, a strong monotone effect.
 
 \vspace{5mm}
-It does not survive control. Everything else held \textbf{fixed}, five seeds,
-test vintages:
+We then varied $\alpha$ alone, holding architecture, dropout, learning rate,
+batch size and bin count fixed, over five seeds and both cohorts:
 
 \vspace{4mm}
 \begin{tabular}{@{}llrr@{}}
@@ -197,17 +200,18 @@ Prepay & post & $\mathbf{+0.0386}$ & 0.0062 \\
 \end{tabular}
 
 \vspace{5mm}
-$\Delta$ is $\alpha{=}0.1 \rightarrow \alpha{=}1$. The effect \textbf{reverses
-sign} across causes. There is no $\alpha$ we can recommend.
+$\Delta$ is the change from $\alpha{=}0.1$ to $\alpha{=}1$. Three of the four
+cells exceed the seed standard deviation and they disagree about direction:
+crisis prepayment loses 0.067 of AUC where post-crisis prepayment gains 0.039.
 
 \vspace{5mm}
-\textbf{A marginal taken over a random search is not an ablation.} In the
-search $\alpha$ varied alongside everything else. We had written the opposite
-conclusion before we ran the controlled version.
+In the search $\alpha$ varied together with depth, dropout and batch size, so the
+pooled table measured all of them at once. \textbf{We had written the
+opposite conclusion before we ran the controlled version.}
 \end{panel}
 
 % ================= COLUMN 3 =================
-\begin{panel}{4. Recalibration cannot fix it}
+\begin{panel}{4. Where the calibration gap comes from}
 \begin{tabular}{@{}lrr@{}}
 \toprule
 Calibration index & Crisis & Post-crisis \\
@@ -219,13 +223,14 @@ Recalibrated (oracle) & \textbf{0.0053} & \textbf{0.0082} \\
 \end{tabular}
 
 \vspace{5mm}
-Fitted on the training vintages --- all a lender has --- rescaling changes almost
-nothing, and in 10 of 16 cells makes calibration worse. Fitted on the test
-vintages, an oracle nobody can build, it cuts error by a median factor of 4.2.
+We estimated a per-horizon rescaling two ways. Fitted on the training
+vintages, which is what a lender has at scoring time, it changes very little and
+in 10 of 16 cells makes calibration worse. Fitted on the test vintages it cuts
+the error by a median factor of 4.2.
 
 \vspace{4mm}
-\textbf{So the penalty is not a broken calibration map. It is the vintage shift
-itself: correctable in principle, unavailable in practice.}
+\textbf{It works when it is estimated on the vintages it will be applied to, and
+those are the ones a lender does not have yet.}
 \end{panel}
 
 \begin{panel}{Calibration at 60 months, crisis cohort}
@@ -233,30 +238,32 @@ itself: correctable in principle, unavailable in practice.}
 
 \vspace{3mm}
 {\fontsize{32}{39}\selectfont Deciles of predicted risk against the
-Aalen--Johansen estimate. Trained on 2005--06, tested on 2007--09,
-\emph{every} curve sits above the diagonal --- prepayment worst.}
+Aalen--Johansen estimate. All three models sit above the diagonal, and the gap
+is far wider for prepayment.}
 \end{panel}
 
 \begin{panel}{Cost}
 \begin{center}
 \bignum{$\approx 2{,}000\times$}{DeepHit (59\,s) versus Fine--Gray (0.03\,s)\\per fit, 150{,}000 loans}
 \end{center}
-Plus 14.4 minutes of hyperparameter search the classical models never need.
+The DeepHit search added 14.4 minutes across the two cohorts. The classical
+models have no search to run.
 \end{panel}
 
 \begin{panel}{What we cannot claim}
-One dataset family. Only five bootstrap replicates per model. Covariates observed
-at origination only --- no time-varying macroeconomic variables. Our recalibration
-is a marginal rescaling, not the per-cause procedures of Alberge et al.\ (2026).
-With 150{,}000 test loans almost anything is significant, so we report effect
-sizes against training noise.
+All results come from one family of US agency mortgages. Variability comes from
+only five bootstrap replicates. Covariates are
+observed at origination, so we have no time-varying macroeconomic variables. Our
+recalibration is a marginal rescaling rather than the per-cause procedures of
+Alberge et al.\ (2026). With 150{,}000 test loans most differences reach
+significance, so we report effect sizes alongside $p$-values.
 \end{panel}
 
 \begin{hilite}
 \begin{center}
 {\fontsize{46}{56}\selectfont\bfseries\color{su}
-Better ranking\\[2mm] in one regime.\\[5mm]
-Worse probabilities\\[2mm] in all of them.}
+DeepHit ranks better in one\\[2mm] of two regimes, and is\\[2mm]
+worse calibrated in both.}
 
 \vspace{6mm}
 {\fontsize{30}{36}\selectfont Code: \texttt{github.com/ar-sadraei/rtds-project}\\[2mm]
