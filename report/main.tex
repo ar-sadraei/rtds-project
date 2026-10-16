@@ -84,9 +84,12 @@ borrowers correctly while attaching the wrong numbers to them.
 Deep models that predict a cumulative incidence per cause exist and have been
 applied to mortgages~\cite{DBLP:conf/aaai/LeeZYS18,
 DBLP:journals/jors/BlumenstockLS22}, but they are selected and reported on
-ranking. This paper asks whether their advantage survives a protocol that
-measures ranking, calibration and cost together, on 550{,}000 Freddie Mac
-mortgages across two economic regimes.
+ranking. Our three literature reviews --- of competing risks in credit scoring,
+of calibration measures, and of evaluation protocol and cost --- converged
+independently on that omission: these models' probabilities are seldom checked,
+and the protocols used to check anything seldom resemble deployment. This paper asks whether the
+advantage survives a protocol that measures ranking, calibration and cost
+together, on 550{,}000 Freddie Mac mortgages across two economic regimes.
 
 % =====================================================================
 \section{Background and Related Work}
@@ -392,18 +395,15 @@ dropout, learning rate, batch size and bin count, and it does not survive contro
 Holding everything else fixed and varying only $\alpha$, over five seeds and both
 cohorts, the effect is small and inconsistent in sign (Table~\ref{tab:alpha}). On
 post-crisis default it is invisible in discrimination, $+0.0005$ against a seed
-standard deviation of 0.0018, while calibration worsens steadily as the ranking
-term is removed, from 0.0189 to 0.0303. On crisis prepayment the pattern inverts:
-removing the ranking term costs 0.067 of AUC and worsens calibration. On
-post-crisis prepayment, removing it \emph{improves} both. Of the four
-cause-by-cohort cells, three show a discrimination effect larger than seed noise
-and they do not agree on direction.
+standard deviation of 0.0018. On crisis prepayment removing the ranking term
+costs 0.067 of AUC and worsens calibration; on post-crisis prepayment it
+\emph{improves} both. Three of the four cause-by-cohort cells show a
+discrimination effect larger than seed noise, and they disagree on direction.
 
 The loss weight is therefore not the dominant hyperparameter the pooled view
-suggested, and no setting of it can be recommended from these data. The
-discrepancy between the two views is itself a result: a marginal
-taken over a random search is not an ablation, and reading one as the other is
-how a hyperparameter acquires a reputation it has not earned.
+suggested, and no setting can be recommended from these data. The discrepancy
+between the two views is itself the result: a marginal taken over a random
+search is not an ablation.
 
 \input{tab_alpha}
 
@@ -416,10 +416,9 @@ how a hyperparameter acquires a reputation it has not earned.
 We pre-registered the hypothesis that choosing a configuration on validation
 discrimination would yield a worse calibrated model than choosing on a
 probability-accuracy criterion, and did not confirm it. Of four model-by-cohort
-comparisons, three differ by less than twice DeepHit's seed-to-seed variation,
-including every post-crisis one. The one robust effect is a $+0.0101$ AUC gain
-in the crisis cohort for the configuration chosen on AUC, which is selection
-behaving as intended rather than a trade-off.
+comparisons, three differ by less than twice DeepHit's seed-to-seed variation.
+The one robust effect is a $+0.0101$ AUC gain in the crisis cohort for the
+configuration chosen on AUC, which is selection behaving as intended.
 
 \input{tab_sig}
 
