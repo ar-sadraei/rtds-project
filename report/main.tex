@@ -141,8 +141,13 @@ risks explicitly, with cause-specific Cox models~\cite{DBLP:journals/jors/Thackh
 random survival forests~\cite{DBLP:journals/jors/FrydmanM22} and boosting~\cite{DBLP:journals/eswa/SaavedraGGK24},
 while macroeconomic covariates have long been used in the single-risk
 setting~\cite{DBLP:journals/jors/BellottiC09}. Blumenstock et al.~\cite{DBLP:journals/jors/BlumenstockLS22}
-applied DeepHit to Freddie Mac mortgages and reported the highest concordance
-index in every experiment, evaluated over ten random train/test splits. On the
+benchmarked DeepHit and a random survival forest against cause-specific Cox and
+Fine--Gray on US mortgages with default and prepayment as competing risks, and
+reported the highest concordance index for DeepHit in every experiment,
+evaluated over ten random train/test splits. Our model set and event pair are
+theirs; what we change is the protocol, and the present paper is therefore a
+replication under vintage-ordered splits with calibration and cost added rather
+than a new benchmark design. On the
 evaluation side, DeepHit's loss combines a likelihood with a ranking term whose
 weight is tuned on validation discrimination~\cite{DBLP:conf/aaai/LeeZYS18};
 Haider et al.~\cite{DBLP:journals/jmlr/HaiderHDG20} define D-calibration for single events,
@@ -153,6 +158,26 @@ calibration measures are unsuited to competing risks, introduce two proper
 measures, and give recalibration methods that improve probabilities while
 preserving discrimination. These measures have not been applied to credit data,
 and no study evaluates ranking, calibration and cost for these models together.
+
+Two qualifications matter for how that gap should be read. First, the deployed
+baseline is not a survival model: reviewing bank disclosures, Bank and
+Eder~\cite{bankeder2021review} find that lifetime probabilities of default under
+IFRS~9 are built mainly from transformations of regulatory estimates and
+rating-based matrix models, and that where competing risks are modelled at all
+the usual device is a discrete-time multinomial logit rather than a Fine--Gray or
+deep model. Competing-risks treatment of prepayment has therefore reached
+production, but in a model family absent from the benchmarking literature.
+Second, calibration is not neglected in practice. Supervisory guidance defines
+calibration as matching a long-run average default rate, and current work in the
+IFRS~9 term-structure setting still censors competing risks for tractability:
+Botha and Verster~\cite{bothaverster2026termstructure} report that 47\% of the
+mortgage spells in their study end in a competing risk, 96\% of them early
+settlements, and treat those spells as right-censored. The gap is thus a mismatch
+between the quantity the benchmarking literature reports and the quantity
+deployment requires, not an absence of concern for probabilities. Wycinka's
+comparison of competing-risks specifications on consumer loans points the same
+way: discrimination separated the models far less than their agreement with the
+empirical cumulative incidence did~\cite{wycinka2019competing}.
 
 % =====================================================================
 \section{Protocol}
