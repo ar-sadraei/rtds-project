@@ -171,6 +171,42 @@ emit("tab_recal", lines,
      header=r"Cohort & Cause & Model & Raw & Recal.\ train & Recal.\ oracle \\",
      colsep="4pt")
 
-print("wrote report/tab_{data,main,sig,alpha,var,recal}.tex")
-for f in ["tab_data","tab_main","tab_sig","tab_alpha","tab_var","tab_recal"]:
+# ---------- T8: what the evaluation protocol is worth ---------------------
+# The benchmarking literature evaluates on random splits; we evaluate on
+# vintage-ordered ones. This table holds the models and their tuned settings
+# fixed and changes only that, so the difference is the protocol's own effect.
+pc = pd.read_csv("results/protocol_comparison.csv")
+rnd = pc[pc.protocol == "random"].pivot_table(
+        index=["cohort", "cause", "seed"], columns="model", values="auc")
+vin = pc[pc.protocol == "vintage"].pivot_table(
+        index=["cohort", "cause"], columns="model", values="auc")
+for f in (rnd, vin):
+    f["dh_cox"] = f["deephit"] - f["cause_specific_cox"]
+    f["dh_rsf"] = f["deephit"] - f["rsf"]
+rm = rnd.groupby(level=[0, 1])[["dh_cox", "dh_rsf"]].mean()
+lines = []
+for ca in ("default", "prepaid"):
+    for co in ("crisis", "postcrisis"):
+        r, v = rm.loc[(co, ca)], vin.loc[(co, ca)]
+        lines.append(f"{SHORT.get(ca,ca)} & {SHORT.get(co,co)} & "
+                     f"{r.dh_cox:+.4f} & {v.dh_cox:+.4f} & "
+                     f"{r.dh_rsf:+.4f} & {v.dh_rsf:+.4f} \\\\")
+emit("tab_protocol", lines,
+     caption=("What the evaluation protocol is worth. DeepHit's AUC advantage at "
+              "60 months over the cause-specific Cox model and over the tuned "
+              "forest, measured under random splits (mean of five seeds, matched "
+              "to the vintage split's train and test sizes; every seed standard "
+              "deviation is at or below 0.0019) and under vintage-ordered splits. "
+              "Models and tuned settings are identical throughout; only the way "
+              "the test set is chosen changes. Under random splits DeepHit leads "
+              "in all eight cells; under vintage ordering three of those leads "
+              "reverse."),
+     label="tab:protocol", colspec="@{}llrrrr@{}",
+     header=(r"& & \multicolumn{2}{c}{vs Cox} & \multicolumn{2}{c}{vs RSF} \\"
+             "\n" r"\cmidrule(lr){3-4}\cmidrule(lr){5-6}" "\n"
+             r"Cause & Cohort & random & vintage & random & vintage \\"),
+     colsep="4pt")
+
+print("wrote report/tab_{data,main,sig,alpha,var,recal,protocol}.tex")
+for f in ["tab_data","tab_main","tab_sig","tab_alpha","tab_var","tab_recal","tab_protocol"]:
     print(f"\n--- {f} ---"); print(open(f"{OUT}/{f}.tex").read())

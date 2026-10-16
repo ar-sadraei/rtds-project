@@ -1,0 +1,18 @@
+\begin{table}[t]
+\caption{What the evaluation protocol is worth. DeepHit's AUC advantage at 60 months over the cause-specific Cox model and over the tuned forest, measured under random splits (mean of five seeds, matched to the vintage split's train and test sizes; every seed standard deviation is at or below 0.0019) and under vintage-ordered splits. Models and tuned settings are identical throughout; only the way the test set is chosen changes. Under random splits DeepHit leads in all eight cells; under vintage ordering three of those leads reverse.}
+\label{tab:protocol}
+\centering\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}llrrrr@{}}
+\toprule
+& & \multicolumn{2}{c}{vs Cox} & \multicolumn{2}{c}{vs RSF} \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+Cause & Cohort & random & vintage & random & vintage \\
+\midrule
+def. & crisis & +0.0025 & +0.0192 & +0.0032 & -0.0000 \\
+def. & post & +0.0022 & -0.0091 & +0.0035 & +0.0005 \\
+prep. & crisis & +0.0178 & +0.0012 & +0.0104 & -0.0651 \\
+prep. & post & +0.0139 & +0.0012 & +0.0108 & +0.0048 \\
+\bottomrule
+\end{tabular}
+\end{table}

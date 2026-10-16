@@ -426,6 +426,34 @@ the vintage shift itself: a rescaling estimated on 2005--06 cannot know that
 in-distribution procedure, and extending it across origination vintages is an
 open problem rather than a step we omitted.
 
+\subsection{What the evaluation protocol is worth}
+% EVIDENCE: results/protocol_comparison.csv, src/run_random_split.py.
+%   Same models, same tuned configs, matched train/test sizes; only the split
+%   rule changes. 5 random seeds, seed sd <= 0.0019 on every gap.
+The benchmarking literature evaluates on random splits; we evaluate on
+vintage-ordered ones. Holding the models and their tuned settings fixed and
+changing only how the test set is drawn isolates what that choice is worth
+(Table~\ref{tab:protocol}). Under random splits DeepHit leads both baselines in
+all eight cause-by-cohort cells, by between $+0.0022$ and $+0.0178$ AUC, and the
+estimates are stable: no seed standard deviation exceeds 0.0019. Under
+vintage ordering three of those eight leads reverse. DeepHit falls behind the
+Cox model on post-crisis default, draws level with the forest on crisis default,
+and loses to it on crisis prepayment by 0.065.
+
+The mechanism is not only leakage. A random split both places temporal
+neighbours of each test loan in the training set and removes the shift between
+origination vintages, and a lender scoring a new loan faces neither advantage.
+The two effects cannot be separated here, and absolute scores do not move in one
+direction: on post-crisis default every model gains between $+0.021$ and
+$+0.033$ AUC from random splitting, while on crisis default the two flexible
+models lose, because the 2007--09 test vintages carry more default signal than a
+random draw does. What moves consistently is the comparison between models, and
+it moves in DeepHit's favour. Since the tuned configurations were selected on an
+out-of-time inner validation, they are if anything suited to the vintage
+protocol, so the gap we measure is a lower bound on the protocol's effect.
+
+\input{tab_protocol}
+
 \subsection{Cost}
 % EVIDENCE (Table~\ref{tab:runtime}): Fine--Gray 0.03 s, Cox 0.42 s, RSF 36 s,
 %   DeepHit 59 s -- about 2,000x for no reliable gain. Filip's gap: the

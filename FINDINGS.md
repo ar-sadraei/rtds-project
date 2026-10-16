@@ -95,7 +95,33 @@ Fitted on the **training** vintages — all a lender has at scoring time — it 
 
 **So the penalty is not a broken calibration map. It is the vintage shift itself: correctable in principle, unavailable in practice.** AUC is identical to four decimals raw vs recalibrated in all 16 cells, confirming the rescaling is monotone.
 
-### 10. Cost spans three orders of magnitude
+### 10. The evaluation protocol decides who wins
+
+Same models, same tuned settings, same train/test sizes. The only thing that
+changes is how the test set is drawn. DeepHit's AUC advantage at 60 months:
+
+| cause | cohort | vs Cox (random) | vs Cox (vintage) | vs RSF (random) | vs RSF (vintage) |
+|---|---|---|---|---|---|
+| default | crisis | +0.0025 | +0.0192 | +0.0032 | −0.0000 |
+| default | post | +0.0022 | **−0.0091** | +0.0035 | +0.0005 |
+| prepaid | crisis | +0.0178 | +0.0012 | +0.0104 | **−0.0651** |
+| prepaid | post | +0.0139 | +0.0012 | +0.0108 | +0.0048 |
+
+**Under random splits DeepHit leads in all eight cells. Under vintage ordering
+three of those leads reverse.** Five random seeds; no seed sd above 0.0019.
+
+Be careful about the mechanism: a random split removes *both* temporal leakage
+*and* the vintage shift, and we cannot separate them. Absolute scores do not all
+move one way — post-crisis default every model gains 0.021–0.033 AUC from random
+splitting, but on crisis default the two flexible models lose, because 2007–09
+carries more default signal than a random draw. What moves consistently is the
+*comparison between models*, and it moves in DeepHit's favour. The tuned configs
+were chosen on out-of-time validation, so this is a lower bound.
+
+This is the one result that is not a replication of Blumenstock et al., who used
+ten random splits. See `results/protocol_comparison.csv`, `src/run_random_split.py`.
+
+### 11. Cost spans three orders of magnitude
 Fine–Gray 0.03 s, Cox 0.42 s, RSF 36 s, DeepHit 59 s per fit on 150,000 loans — roughly **2,000×** — plus 14.4 minutes of hyperparameter search the classical models never need.
 
 ---
