@@ -208,15 +208,16 @@ of a reported advantage is attributable to the evaluation protocol itself
 The strategy is experimental in Denscombe's sense: an empirical investigation
 under controlled conditions producing numerical outcomes, with hypotheses fixed
 before measurement and controls held over every factor not under test. It is closer to an
-evaluation design than to a treatment experiment, since it compares existing
-models rather than intervening. The data are secondary records of loans rather than of people, so no ethical
+evaluation design than to a treatment experiment. The data are secondary records of loans rather than of people, so no ethical
 approval was required; the licence permits academic use but not redistribution,
 which is why the repository excludes the data and rebuilds the tables from
 archives the reader downloads.
 
-Three delimitations were fixed before any model was run: US agency mortgages
-only, covariates observed at origination rather than time-varying macroeconomic
-series, and horizons up to 60 months rather than a full mortgage term.
+Four delimitations were fixed before any model was run: US agency mortgages
+only; covariates observed at origination rather than time-varying macroeconomic
+series; horizons up to 60 months rather than a full mortgage term; and the
+lifetime PD term structure alone, one input to expected credit loss, leaving
+loss given default, exposure at default, discounting and staging out of scope.
 % This section is why the paper is a contribution and not just a model run.
 % State it as a protocol others could re-run, because that is Filip's gap.
 
@@ -384,9 +385,8 @@ DeepHit's own seed variation. These are among the few comparisons in this study
 where we fail to reject: whatever the deep model captures, a
 forest captures as well. On prepayment in the crisis cohort the forest is
 distinctly better, reaching an AUC of 0.685 against 0.620 and a
-calibration index of 0.154 against 0.236. The competing event, which the credit
-literature most often censors, is where the gap between the two is widest
-(Fig.~\ref{fig:calib}, right).
+calibration index of 0.154 against 0.236 --- the competing event the credit
+literature most often censors (Fig.~\ref{fig:calib}, right).
 
 \subsection{The loss weight is not a reliable knob}
 % CLAIM: across 40 configurations, weighting the ranking loss more heavily makes
@@ -444,8 +444,7 @@ has when scoring a new loan, it changes almost nothing: in ten of sixteen cells
 it leaves the calibration index worse than the raw predictions. Fitted
 instead on the test vintages --- an oracle no lender could build --- it reduces
 the index by a median factor of 4.2, reaching 14.7 for Fine--Gray on post-crisis
-default. The single exception is
-the forest on crisis default, which the oracle leaves unchanged.
+default.
 
 The contrast identifies the penalty. It is not a defective calibration map, or
 the oracle correction would not work; it is the vintage shift, since a rescaling
@@ -460,8 +459,8 @@ omitted.
 %   Same models, same tuned configs, matched train/test sizes; only the split
 %   rule changes. 5 random seeds, seed sd <= 0.0019 on every gap.
 The benchmarking literature evaluates on random splits; we evaluate on
-vintage-ordered ones. Holding the models and their tuned settings fixed and
-changing only how the test set is drawn isolates what that choice is worth
+vintage-ordered ones. Holding models and tuned settings fixed and changing
+only how the test set is drawn isolates what that choice is worth
 (Table~\ref{tab:protocol}). Under random splits DeepHit leads both baselines in
 all eight cause-by-cohort cells, by $+0.0022$ to $+0.0178$ AUC, with no seed
 standard deviation above 0.0019. Under vintage ordering three of those leads
@@ -517,24 +516,22 @@ deep competing-risks models perform well on mortgage
 data~\cite{DBLP:journals/jors/BlumenstockLS22}. DeepHit does win on crisis-era
 loans once tuned, and an untuned deep baseline is not evidence. But the win is
 confined to one regime, disappears against a random survival forest, costs three
-orders of magnitude more compute, and carries a calibration penalty in every
-condition we tested. For a lender who needs a probability rather than an
-ordering, that is difficult to justify.
+orders of magnitude more compute, and carries a calibration penalty throughout.
+For a lender needing a probability rather than an ordering, that is difficult to
+justify.
 
 Against the quality criteria for quantitative work, reliability is measured
 rather than asserted: every comparison carries a variability estimate from
 seeds, from bootstrap resamples of the test set, and from refitting on resampled
-training vintages. Replicability is a public pipeline that regenerates every
-table. Internal validity rests on varying one factor at a time, which the
+training vintages. Replicability is the public pipeline. Internal validity rests on varying one factor at a time, which the
 $\alpha$ ablation and the protocol comparison each enforce. Construct validity is the
 paper's subject rather than an assumption: we ask whether discrimination
-measures what it is used to decide. Generalisation is weakest:
-the findings hold for US agency mortgages and are not claimed beyond them.
+measures what it is used to decide. Generalisation is weakest, and bounded by the first
+delimitation above.
 
 Within those bounds, several limitations remain. Our recalibration is a marginal
 per-horizon rescaling rather than the per-cause procedures of
-Alberge et al.~\cite{alberge2026calibration}, though the oracle column suggests the
-ceiling is set by what is knowable at scoring time. Training variability is
+Alberge et al.~\cite{alberge2026calibration}. Training variability is
 estimated from five bootstrap resamples, which conflates sampling with
 optimisation noise. The forest is cause-specific rather than Ishwaran's
 competing-risks formulation. And excluding the time-varying macroeconomic
@@ -551,12 +548,11 @@ variation.
 
 \section*{Author Contributions}
 The three reviews were written independently: A.S.\ on competing risks in
-credit scoring, A.E.N.\ on calibration of survival predictions, F.B.\ on
-evaluation protocol and cost. A.S.\ built the pipeline, models and metrics and
-ran the experiments; A.E.N.\ specified the calibration measures and the
-recalibration study; F.B.\ specified the split protocol, tuning budget and cost
-measurement. The gap in Section~III, the hypotheses and the final analysis were
-agreed jointly. Code: \url{https://github.com/ar-sadraei/rtds-project}.
+credit scoring, A.E.N.\ on calibration, F.B.\ on evaluation protocol and cost.
+A.S.\ built the pipeline, models and metrics and ran the experiments; A.E.N.\
+specified the calibration measures and recalibration study; F.B.\ the split
+protocol, tuning budget and cost measurement. The gap, hypotheses and final analysis
+were agreed jointly; code at \url{github.com/ar-sadraei/rtds-project}.
 
 % The scaffold cites nothing yet (citations live in the section comments), so the
 % bibliography is seeded with \nocite to keep the build valid. DELETE this block
