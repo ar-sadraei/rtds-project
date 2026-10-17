@@ -156,14 +156,13 @@ measures, and give recalibration methods that improve probabilities while
 preserving discrimination. These measures have not been applied to credit data,
 and no study evaluates ranking, calibration and cost for these models together.
 
-Two qualifications matter for how that gap should be read. First, the deployed
-baseline is not a survival model: reviewing bank disclosures, Bank and
-Eder~\cite{bankeder2021review} find that lifetime probabilities of default under
-IFRS~9 are built mainly from transformations of regulatory estimates and
-rating-based matrix models, and that where competing risks are modelled at all
-the usual device is a discrete-time multinomial logit rather than a Fine--Gray or
-deep model. Competing risks have therefore reached production, but in a
-model family absent from the benchmarking literature. Second, calibration is not
+Two qualifications matter for how that gap should be read. First, the deployed baseline is not a survival model: reviewing bank
+disclosures, Bank and Eder~\cite{bankeder2021review} find lifetime probabilities
+of default under IFRS~9 built mainly from transformations of regulatory
+estimates and rating-based matrix models, with discrete-time multinomial logit
+the usual device where competing risks are modelled at all. Competing risks have
+therefore reached production, in a model family absent from the benchmarking
+literature. Second, calibration is not
 neglected in practice: supervisory guidance defines it as matching a long-run
 average default rate, and current IFRS~9 term-structure work still censors
 competing risks for tractability:
@@ -191,17 +190,33 @@ three symptoms of one condition: deep competing-risks models are chosen and
 reported on a ranking statistic, under a protocol unlike the way a lender meets
 a new loan, and their probabilities go unchecked.
 
-The gap follows directly: whether the reported advantage of deep
-competing-risks models over classical ones survives when calibration and cost
-are measured alongside ranking, and the test set is drawn in origination order.
-We divide that question into four parts: whether a ranking
-advantage holds across economic regimes (\S\ref{sec:regime}); whether it
-survives against a flexible non-deep baseline (\S\ref{sec:forest}); whether it
-is accompanied by a calibration penalty, and whether recalibration repairs it
-(\S\ref{sec:recal}); and how much of a reported advantage is attributable to the
-evaluation protocol itself rather than to the model (\S\ref{sec:protocol}).
+The gap follows directly. This research evaluates how much of the reported
+advantage of deep competing-risks models is a property of the way they are
+measured rather than of the models themselves. Our research question is:
+\emph{to what extent does the measured advantage of deep competing-risks models
+over classical ones change when ranking, calibration and cost are evaluated
+together on vintage-ordered splits?} It divides into four sub-questions. How
+does any ranking advantage differ between economic regimes
+(\S\ref{sec:regime})? How much of it survives against a flexible non-deep
+baseline (\S\ref{sec:forest})? What calibration penalty accompanies it, and how
+much of that penalty can recalibration repair (\S\ref{sec:recal})? And how much
+of a reported advantage is attributable to the evaluation protocol itself
+(\S\ref{sec:protocol})?
 
 \section{Protocol}
+% RMCSS: name the strategy, state ethics, separate delimitations from limitations.
+The strategy is experimental in Denscombe's sense: an empirical investigation
+under controlled conditions producing numerical outcomes, with hypotheses fixed
+before measurement and controls held over every factor not under test. It is closer to an
+evaluation design than to a treatment experiment, since it compares existing
+models rather than intervening. The data are secondary records of loans rather than of people, so no ethical
+approval was required; the licence permits academic use but not redistribution,
+which is why the repository excludes the data and rebuilds the tables from
+archives the reader downloads.
+
+Three delimitations were fixed before any model was run: US agency mortgages
+only, covariates observed at origination rather than time-varying macroeconomic
+series, and horizons up to 60 months rather than a full mortgage term.
 % This section is why the paper is a contribution and not just a model run.
 % State it as a protocol others could re-run, because that is Filip's gap.
 
@@ -217,19 +232,19 @@ evaluation protocol itself rather than to the model (\S\ref{sec:protocol}).
 %   ten European portfolios -- an independent replication on different data.
 Our data are 50{,}000-loan samples per origination year from the Freddie Mac
 Single-Family Loan-Level Dataset: 300{,}000 loans originated 2013--2018 and
-250{,}000 originated 2005--2009, with performance observed to March 2026
-(Table~\ref{tab:data}). Default is the first month at 90 or more days past due,
+250{,}000 originated 2005--2009, with performance observed to March 2026. The
+post-crisis cohort is 4.5\% default and 75.0\% prepaid; the crisis cohort, 10.5\%
+and 87.1\%. Default is the first month at 90 or more days past due,
 following~\cite{DBLP:journals/jors/BlumenstockLS22}; prepayment is zero-balance
 code 01. Time is loan age in months, so the origin is origination.
 These data reproduce the contrast that motivates the competing-risks framing:
-counting prepayment as an event leaves 20.6\% of loans censored, while censoring
-it leaves 95.5\%. Dirick et al.~\cite{DBLP:journals/jors/DirickCB17} report 20--85\% and
+counting prepayment as an event leaves 20.6\% of post-crisis loans censored,
+while censoring it leaves 95.5\%. Dirick et al.~\cite{DBLP:journals/jors/DirickCB17} report 20--85\% and
 94.56--98.16\% on ten European consumer-credit portfolios; ours sit at the lower
 edge of the first range and inside the second, on a different product, country
 and decade. Prepayment is not a nuisance here but the dominant outcome,
 outnumbering default seventeen to one.
 
-\input{tab_data}
 
 \subsection{Models and the common interface}
 % EVIDENCE: every model exposes fit() and predict_cif(X, horizons, cause), so no
@@ -247,9 +262,8 @@ subdistribution model, a random survival forest and DeepHit. Two implementation
 details matter for interpretation. Cox and Fine--Gray were implemented directly,
 since no mainstream Python library provides Fine--Gray; both maximise a Breslow
 partial likelihood, with Fine--Gray retaining subjects who experience the
-competing event in the risk set, weighted by the ratio of the censoring survival
-function at the current time to its value at their event time, as
-in~\cite{finegray1999subdistribution}. Our forest is a cause-specific random
+competing event in the risk set under the censoring weights
+of~\cite{finegray1999subdistribution}. Our forest is a cause-specific random
 survival forest, fitting one forest per cause, and is therefore a relative of
 rather than a replication of the composite-splitting competing-risks forest used
 by~Frydman and Matuszyk~\cite{DBLP:journals/jors/FrydmanM22}.
@@ -266,17 +280,14 @@ AUC at 12 to 60 months, with subjects who experience the competing event treated
 as controls because they can never experience the cause of interest. Calibration
 is measured in two ways: the integrated Brier score for the cumulative incidence,
 and a calibration index comparing mean predicted risk against the
-Aalen--Johansen estimate within deciles of predicted risk. It is a binned form of the
-integrated calibration index~\cite{austin2019ici}, whose competing-risks version
-smooths the calibration curve rather than binning
-it~\cite{austin2022icicr}. Cost is the measured
-fit and prediction time with the hardware recorded. Censoring weights come from a
-Kaplan--Meier estimate fitted on the training set only. Because the time origin
-is origination and every vintage has at least eight years of follow-up, censoring
-before 60 months is rare: $G(60)=0.9986$ in both cohorts, so these weights are
-near one and it is the competing event, not censoring, that shapes the results. We do not implement the
-per-cause calibration measures of~Alberge et al.~\cite{alberge2026calibration}; adding them is
-the clearest extension of this work.
+Aalen--Johansen estimate within deciles of predicted risk --- a binned form of
+the integrated calibration index~\cite{austin2019ici}, whose competing-risks
+version smooths the curve rather than binning it~\cite{austin2022icicr}. Cost is
+measured fit and prediction time. Censoring weights come from a Kaplan--Meier
+estimate fitted on the training set only; because the time origin is origination
+and every vintage has at least eight years of follow-up, $G(60)=0.9986$ in both
+cohorts, so those weights are near one and it is the competing event, not
+censoring, that shapes the results.
 
 \subsection{Splits, tuning budget and hypotheses}
 % EVIDENCE: vintage-ordered splits (train earlier origination years, test later),
@@ -329,22 +340,20 @@ DeepHit's standing depends on which economic regime it is tested in
 (Table~\ref{tab:main}). On the crisis cohort the tuned model reaches an AUC of
 0.8538 against 0.8346 for the cause-specific Cox model, a difference of $+0.0192$
 that is significant under the paired bootstrap. That margin should be read with
-care: refitting on bootstrap resamples of the training vintages
-(Table~\ref{tab:var}) gives the Cox model a standard deviation of 0.0159 in this
-cohort, against 0.0035 for DeepHit, so the gap is little more than one standard
-deviation of the baseline's own training variability: here the classical models
-are the unstable ones. On the post-crisis cohort
-the ordering reverses: 0.7280 against 0.7372, a difference of $-0.0091$ that is
-also significant (Table~\ref{tab:sig}) and, with every training standard
-deviation below 0.0022 in that cohort, comfortably outside the noise. The calibration comparison does not
-reverse. In both cohorts DeepHit's calibration index is 0.0040 worse
-than Cox's, so the regime that decides whether the deep model ranks better does
-not change the direction of the calibration gap (Fig.~\ref{fig:calib}, left). The
-two cohorts carry it with very different force: post-crisis the gap is about
-eighteen times the combined training variability of the two models, on crisis
-data only about 1.7 times it. The sign replicates; the size does not. Every curve in that figure lies above
-the diagonal, so calibration here is limited less by model class than by the
-vintage shift itself.
+care: refitting on five bootstrap resamples of the training vintages gives the
+Cox model a standard deviation of 0.0159 in this cohort and Fine--Gray 0.0206,
+against 0.0035 for DeepHit and 0.0009 for the forest, so the gap is little more
+than one standard deviation of the baseline's own training variability: here the
+classical models are the unstable ones. On the post-crisis cohort the ordering reverses, 0.7280
+against 0.7372, a difference of $-0.0091$ that is also significant
+(Table~\ref{tab:sig}) and, with every training standard deviation below 0.0022
+there, outside the noise. Calibration does not reverse: DeepHit's index is
+0.0040 worse than Cox's in both cohorts (Fig.~\ref{fig:calib}, left). The two
+carry that with very different force, about eighteen times the models' combined
+training variability post-crisis against 1.7 times on crisis data, so the sign
+replicates and the size does not. Every curve in the figure lies above the
+diagonal: calibration here is limited less by model class than by the vintage
+shift.
 
 
 \begin{figure*}[t]
@@ -422,7 +431,6 @@ configuration chosen on AUC, which is selection behaving as intended.
 
 \input{tab_sig}
 
-\input{tab_var}
 \input{tab_recal}
 
 \subsection{Recalibration does not help, and why}
@@ -438,12 +446,12 @@ the index by a median factor of 4.2, reaching 14.7 for Fine--Gray on post-crisis
 default. The single exception is
 the forest on crisis default, which the oracle leaves unchanged.
 
-The contrast identifies what the calibration penalty actually is. It is not a
-defective calibration map, or the oracle correction would not work so well. It is
-the vintage shift itself: a rescaling estimated on 2005--06 cannot know that
-2007--09 would turn out worse. Recalibration as demonstrated in the literature is an
-in-distribution procedure, and extending it across origination vintages is an
-open problem rather than a step we omitted.
+The contrast identifies the penalty. It is not a defective calibration map, or
+the oracle correction would not work; it is the vintage shift, since a rescaling
+estimated on 2005--06 cannot know that 2007--09 would turn out worse.
+Recalibration as demonstrated in the literature is an in-distribution procedure,
+and extending it across vintages is an open problem rather than a step we
+omitted.
 
 \subsection{What the evaluation protocol is worth}
 \label{sec:protocol}
@@ -507,43 +515,50 @@ them~\cite{wiegrebe2024deep}.
 Taken together these results qualify, rather than contradict, the finding that
 deep competing-risks models perform well on mortgage
 data~\cite{DBLP:journals/jors/BlumenstockLS22}. DeepHit does win on crisis-era
-loans once tuned; an untuned deep baseline is not evidence. But
-the win is confined to one regime, disappears against a random survival forest,
-costs three orders of magnitude more compute, and is accompanied by a calibration
-penalty in every condition we tested. For a lender who needs a probability rather
-than an ordering, that combination is difficult to justify.
+loans once tuned, and an untuned deep baseline is not evidence. But the win is
+confined to one regime, disappears against a random survival forest, costs three
+orders of magnitude more compute, and carries a calibration penalty in every
+condition we tested. For a lender who needs a probability rather than an
+ordering, that is difficult to justify.
 
-Several limitations bound these conclusions. Our recalibration is a marginal
+Against the quality criteria for quantitative work, reliability is measured
+rather than asserted: every comparison carries a variability estimate from
+seeds, from bootstrap resamples of the test set, and from refitting on resampled
+training vintages. Replicability is a public pipeline that regenerates every
+table. Internal validity rests on varying one factor at a time, which the
+$\alpha$ ablation and the protocol comparison each enforce. Construct validity is the
+paper's subject rather than an assumption: we ask whether discrimination
+measures what it is used to decide. Generalisation is weakest:
+the findings hold for US agency mortgages and are not claimed beyond them.
+
+Within those bounds, several limitations remain. Our recalibration is a marginal
 per-horizon rescaling rather than the per-cause procedures of
-Alberge et al.~\cite{alberge2026calibration}; a stronger correction might close more of the gap,
-though the oracle column suggests the ceiling is set by what is
-knowable at scoring time. Training variability is estimated
-from five bootstrap resamples, which conflates sampling with optimisation
-noise. Our covariates are observed at origination, with
-no time-varying macroeconomic variables of the kind
-introduced by~Bellotti and Crook~\cite{DBLP:journals/jors/BellottiC09}. The forest is
-cause-specific rather than Ishwaran's competing-risks formulation, and all
-results come from a single family of US agency mortgages.
+Alberge et al.~\cite{alberge2026calibration}, though the oracle column suggests the
+ceiling is set by what is knowable at scoring time. Training variability is
+estimated from five bootstrap resamples, which conflates sampling with
+optimisation noise. The forest is cause-specific rather than Ishwaran's
+competing-risks formulation. And excluding the time-varying macroeconomic
+variables of~Bellotti and Crook~\cite{DBLP:journals/jors/BellottiC09} leaves the
+vintage-shift result without a mechanism.
 
 Under one protocol measuring ranking, calibration and cost together on
 vintage-ordered splits, deep competing-risks models offer no reliable advantage
 over classical or tree-based baselines on mortgage data, are worse calibrated in
-both regimes, and depend on the regime for whatever ranking advantage they show.
-The result that generalises past this benchmark is methodological: a
+both regimes, and depend on the regime for what ranking advantage they show.
+What generalises past this benchmark is methodological: a
 hyperparameter's apparent effect in a pooled search did not survive controlled
 variation.
 
 \section*{Author Contributions}
-The three reviews behind this project were written independently: A.S.\ on
-competing risks in credit scoring, A.E.N.\ on calibration of survival
-predictions, F.B.\ on evaluation protocol and cost. The gap in Section~III was
-identified jointly from them. A.S.\ built the pipeline, models and metrics and
-ran the experiments; A.E.N.\ specified the calibration measures and the
-recalibration study; F.B.\ specified the split protocol, tuning budget and cost
-measurement. All authors agreed the hypotheses in advance and reviewed the
-final analysis. Code and data:
-\url{https://github.com/ar-sadraei/rtds-project} rebuilds every table here; the
-Freddie Mac data require registration and cannot be redistributed.
+The three reviews were written independently: A.S.\ on competing risks in
+credit scoring, A.E.N.\ on calibration of survival predictions, F.B.\ on
+evaluation protocol and cost; the gap in Section~III was identified jointly from
+them. A.S.\ built the pipeline, models and metrics and ran the experiments;
+A.E.N.\ specified the calibration measures and the recalibration study; F.B.\
+specified the split protocol, tuning budget and cost measurement. All authors
+fixed the hypotheses in advance and reviewed the final analysis. Code at
+\url{https://github.com/ar-sadraei/rtds-project}; the Freddie Mac data require
+registration and cannot be redistributed.
 
 % The scaffold cites nothing yet (citations live in the section comments), so the
 % bibliography is seeded with \nocite to keep the build valid. DELETE this block
