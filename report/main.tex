@@ -170,10 +170,10 @@ Botha and Verster~\cite{bothaverster2026termstructure} report that 47\% of the
 mortgage spells in their study end in a competing risk, 96\% of them early
 settlements, and treat those spells as right-censored. The gap is thus a mismatch
 between the quantity the benchmarking literature reports and the quantity
-deployment requires, not an absence of concern for probabilities. Wycinka's
-comparison of competing-risks specifications on consumer loans points the same
-way: discrimination separated the models far less than their agreement with the
-empirical cumulative incidence did~\cite{wycinka2019competing}.
+deployment requires, not an absence of concern for probabilities. Wycinka finds the
+same on consumer loans: discrimination separated the specifications far less
+than their agreement with the empirical cumulative
+incidence did~\cite{wycinka2019competing}.
 
 % =====================================================================
 \section{Research Problem and Question}
@@ -314,14 +314,15 @@ hypothesis that the models do not differ, a significance level of 0.05, and a
 Bonferroni correction across the three metric families, giving a threshold of
 0.0167. A family is the three metrics of one pre-specified comparison in one cohort;
 thirty-six tests are computed in all, so the correction holds within a family,
-not across the table. Differences are assessed by a paired bootstrap over the test set with 500
-resamples, which cannot resolve $p$ below $1/500$, so $0.002$ is reported as an
-upper bound.
-Because the bootstrap holds the fitted model fixed and therefore understates
-total uncertainty, DeepHit was additionally refitted with five seeds per cohort;
-its seed-to-seed standard deviation was 0.0014 and 0.0010 in AUC, and we treat
-differences below twice that as indistinguishable regardless of their
-$p$-value.
+not across the table. Differences are assessed by a paired bootstrap rather than a parametric test,
+whose assumptions fail here: observations are paired, since the quantities
+compared come from the same test loans, and the sampling distributions of AUC
+and the calibration index are neither normal nor known in closed form. With 500
+resamples it cannot resolve $p$ below $1/500$; $0.002$ is an upper bound.
+Because the bootstrap holds the fitted model fixed and understates total
+uncertainty, DeepHit was refitted with five seeds per cohort; its seed-to-seed
+standard deviation was 0.0014 and 0.0010 in AUC, and we treat differences below
+twice that as indistinguishable regardless of $p$.
 
 % =====================================================================
 \section{Results}
@@ -469,14 +470,13 @@ forest on crisis default, and loses to it on crisis prepayment by 0.065.
 
 The mechanism is not only leakage. A random split both places temporal
 neighbours of each test loan in the training set and removes the shift between
-origination vintages; a lender faces neither advantage. The two cannot be
-separated here, and absolute scores do not move in one direction: on post-crisis
-default every model gains $+0.021$ to $+0.033$ AUC from random splitting, while
-on crisis default the two flexible models lose, the 2007--09 vintages carrying
-more default signal than a random draw. What moves consistently is the
-comparison between models, and it moves in DeepHit's favour. The tuned
-configurations were selected on out-of-time validation, so the measured effect
-is a lower bound.
+origination vintages, and a lender faces neither advantage; the two cannot be
+separated here. Absolute scores do not move in one direction: on post-crisis
+default every model gains $+0.021$ to $+0.033$ AUC, while on crisis default the
+flexible models lose, 2007--09 carrying more default signal than a random draw.
+What moves consistently is the comparison between models, and it moves in
+DeepHit's favour. The tuned configurations were selected on out-of-time
+validation, so the effect is a lower bound.
 
 \input{tab_protocol}
 
@@ -552,13 +552,11 @@ variation.
 \section*{Author Contributions}
 The three reviews were written independently: A.S.\ on competing risks in
 credit scoring, A.E.N.\ on calibration of survival predictions, F.B.\ on
-evaluation protocol and cost; the gap in Section~III was identified jointly from
-them. A.S.\ built the pipeline, models and metrics and ran the experiments;
-A.E.N.\ specified the calibration measures and the recalibration study; F.B.\
-specified the split protocol, tuning budget and cost measurement. All authors
-fixed the hypotheses in advance and reviewed the final analysis. Code at
-\url{https://github.com/ar-sadraei/rtds-project}; the Freddie Mac data require
-registration and cannot be redistributed.
+evaluation protocol and cost. A.S.\ built the pipeline, models and metrics and
+ran the experiments; A.E.N.\ specified the calibration measures and the
+recalibration study; F.B.\ specified the split protocol, tuning budget and cost
+measurement. The gap in Section~III, the hypotheses and the final analysis were
+agreed jointly. Code: \url{https://github.com/ar-sadraei/rtds-project}.
 
 % The scaffold cites nothing yet (citations live in the section comments), so the
 % bibliography is seeded with \nocite to keep the build valid. DELETE this block
