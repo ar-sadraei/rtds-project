@@ -139,12 +139,27 @@ random survival forests~\cite{DBLP:journals/jors/FrydmanM22} and boosting~\cite{
 while macroeconomic covariates have long been used in the single-risk
 setting~\cite{DBLP:journals/jors/BellottiC09}. Blumenstock et al.~\cite{DBLP:journals/jors/BlumenstockLS22}
 benchmarked DeepHit and a random survival forest against cause-specific Cox and
-Fine--Gray on US mortgages with default and prepayment as competing risks, and
-reported the highest concordance index for DeepHit in every experiment,
-evaluated over ten random train/test splits. Our model set and event pair are
-theirs; what we change is the protocol, and the present paper is therefore a
-replication under vintage-ordered splits with calibration and cost added rather
-than a new benchmark design. On the
+Fine--Gray on 600{,}000 US mortgages with default and prepayment as competing
+risks, reporting the highest time-dependent concordance index for DeepHit in
+every experiment. Their design already splits temporally, with random
+subsampling inside it into folds of ten thousand instances --- a size forced by
+the forest's compute --- and one of their experiments trains before the crisis
+and tests in 2009. Time ordering is therefore not what distinguishes the present
+study. What distinguishes it is the quantity measured: their evaluation is
+concordance alone, and the words calibration and Brier do not appear in the
+paper. Our model set and event pair are theirs; we add calibration and cost,
+train at full scale rather than on subsamples, and measure what the choice of
+split protocol is itself worth.
+
+That omission is not peculiar to one paper, and it is not always visible as an
+omission. Saavedra-Garc\'ia et al.~\cite{DBLP:journals/eswa/SaavedraGGK24} apply
+competing-risks boosting to IFRS~9 lifetime default and do report three
+measures, but describe the dynamic AUC as ``providing a measure of calibration
+over time'' and read the integrated Brier score as indicating ``effective
+calibration''. The first is a discrimination measure; the second is a proper
+score that confounds the two. A recent paper in the target application can
+therefore believe it has measured calibration while reporting neither a
+calibration curve nor a calibration error. On the
 evaluation side, DeepHit's loss combines a likelihood with a ranking term whose
 weight is tuned on validation discrimination~\cite{DBLP:conf/aaai/LeeZYS18};
 Haider et al.~\cite{DBLP:journals/jmlr/HaiderHDG20} define D-calibration for single events,
