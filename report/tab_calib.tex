@@ -1,0 +1,19 @@
+\begin{table}[t]
+\caption{Calibration under the two measures Alberge et al. prove are proper for competing risks: AJ-calibration, which is marginal over events and time, and CR D-calibration, which is distributional. Lower is better and zero is perfect. The Aalen--Johansen estimator is marginally consistent by construction and scores $4\times10^{-5}$ or less on a random split, so its values here measure the vintage shift rather than a modelling failure. DeepHit is worst under both measures in both cohorts.}
+\label{tab:calib}
+\centering\footnotesize
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+& \multicolumn{2}{c}{AJ-calibration} & \multicolumn{2}{c}{CR D-calibration} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+Model & crisis & post & crisis & post \\
+\midrule
+Aalen--Johansen & 0.0096 & 0.0129 & 0.0084 & 0.0980 \\
+Cox & 0.0173 & 0.0075 & 0.0224 & 0.0795 \\
+Fine--Gray & 0.0135 & 0.0081 & 0.0180 & 0.0902 \\
+RSF & 0.0108 & 0.0092 & 0.0101 & 0.1027 \\
+DeepHit & 0.0251 & 0.0125 & 0.0270 & 0.1286 \\
+\bottomrule
+\end{tabular}
+\end{table}

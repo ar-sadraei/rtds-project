@@ -177,7 +177,9 @@ both models' noise. The first two were caught and fixed; this one was not.
 
 Fine–Gray CIFs not constrained to sum below 1, declared. RSF is cause-specific rather than
 Ishwaran's competing-risks formulation, declared. Per-cause D-calibration deliberately not
-implemented rather than approximated. The oracle recalibration labelled unattainable
+implemented rather than approximated — *superseded 20 Oct: both of Alberge's proper
+measures are now implemented from the authors' own code rather than approximated, which
+is the same principle reaching a better outcome.* The oracle recalibration labelled unattainable
 rather than reported as a result. Novelty assessed as confirmatory rather than claimed.
 
 ## F. What the audit cannot fix

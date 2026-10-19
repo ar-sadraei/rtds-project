@@ -11,7 +11,7 @@ others cannot be given:
 
     model, split, protocol, seed, cause, metric, horizon, value
 
-Every number in the report and poster comes from that table, so each claim is
+Every number in the report comes from that table, so each claim is
 traceable to a single row.
 
 Runtime is instrumented here, not bolted on afterwards. Filip's gap is that the

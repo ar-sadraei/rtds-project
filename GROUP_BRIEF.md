@@ -1,7 +1,7 @@
 # Where the project stands
 
-*For Filip, Ali Emre and Amirreza. 18 Oct 2026. Checked against
-`RTDS_Project_Overview.pdf` (15 Oct).*
+*For Filip, Ali Emre and Amirreza. 20 Oct 2026. Checked against
+`RTDS_Project_Overview.pdf` (15 Oct) and the course brief.*
 
 ---
 
@@ -52,13 +52,19 @@ contemporaneous loans, and trails or draws in 4 of 4 when trained on earlier
 ones.
 
 ### Problem 3 — ranking vs probabilities
-**Mostly done.** We report IPCW time-dependent AUC, an integrated Brier score
-on the cumulative incidence, and calibration curves against the Aalen–Johansen
-estimate.
+**Done.** We report IPCW time-dependent AUC, an integrated Brier score on the
+cumulative incidence, and **three** calibration measures: our decile-binned
+index, plus both of the measures Alberge et al. (2026) prove are proper for
+competing risks — AJ-calibration (marginal over events and time) and CR
+D-calibration (distributional).
 
-**Answer: the calibration penalty is real and does not reverse** — DeepHit's
-calibration error is worse than Cox's in both eras. But our hypothesis that
-*the ranking of models changes when calibration is added* was **not confirmed**.
+**Answer: the calibration penalty is real and does not reverse.** All three
+measures independently rank DeepHit worst. Under CR D-calibration on crisis
+data DeepHit scores 0.0270 against 0.0084 for the Aalen–Johansen estimator —
+a model with no covariates at all produces better probabilities than the deep
+network. Our hypothesis that *the ranking of models changes when calibration is
+added* was **not confirmed**: DeepHit has no reliable ranking advantage to
+lose.
 
 ---
 
@@ -67,7 +73,7 @@ calibration error is worse than Cox's in both eras. But our hypothesis that
 | | Hypothesis | Verdict |
 |---|---|---|
 | H1 | Deep models keep their ranking advantage on later data | **Refuted.** No reliable advantage in any cell. |
-| H2 | Deep models lose more on calibration | **Supported.** Worse in both eras. |
+| H2 | Deep models lose more on calibration | **Supported.** Worst of five models under all three calibration measures, in both eras. |
 | H3 | Any gain costs clearly more runtime | **Supported.** ~2,000×. |
 
 Our overview said "any outcome is a result". Two of three hypotheses survived
@@ -91,10 +97,13 @@ and one was refuted, which is a result.
 1. **SEER never arrived.** The overview put SEER first and mortgage data second,
    with the fallback being "SEER only". We ended up with the exact inverse:
    mortgage only, SEER as future work. This is the biggest deviation.
-2. **Competing-events D-calibration (Alberge et al. 2026) is not implemented.**
-   It is in the overview's metric list. We use a decile-binned calibration index
-   instead and say so in the paper. This is the clearest thing still missing,
-   and it sits in Ali's area.
+2. ~~Competing-events D-calibration is not implemented.~~ **Now done (20 Oct).**
+   Both proper measures from Alberge et al. (2026) are implemented and reported
+   in Table IV. CR D-calibration is not in any released version of their
+   library: it comes from their open pull request (`soda-inria/hazardous` PR
+   100, branch `dcal`, commit `26e6432`), which the paper states explicitly.
+   The decile index is kept beside them because it is what the credit
+   literature uses.
 3. **No C-index.** The overview lists "standard and time-dependent C-index per
    event". We deliberately use IPCW time-dependent AUC instead, because Blanche,
    Kattan and Gerds (2019) show the C-index is improper for t-year risk — it can
@@ -131,16 +140,24 @@ project's own argument that evaluation protocol decides the answer.
 
 ## 6. What is left
 
-- Rewrite the paper around the protocol finding as the single claim (in
-  progress).
-- **Group decision needed:** do we implement Alberge's D-calibration, or state
-  it as future work? It is in our overview and it is currently missing.
+- **Merge Filip's draft.** His §I–§II with our §III–§V. Two things to fix on the
+  way in: his file uses the 10pt `[conference]` class where ours is
+  `[11pt,journal]`, and his DeepHit citation carries page numbers 2314–2321
+  that need checking against the actual AAAI proceedings before submission.
 - **Group decision needed:** do we add back a C-index for comparability with the
-  literature, or keep the AUC-only choice and justify it?
-- Everyone reads the final draft. The α result and the crisis-advantage result
-  both changed after earlier drafts, so anything remembered from before is out
-  of date.
-- Author contributions statement needs to be made accurate before submission.
+  literature, or keep the AUC-only choice and justify it? We currently use IPCW
+  time-dependent AUC and justify it from Blanche et al., who show the C-index is
+  improper for t-year risk. This is a defensible change from our overview but it
+  *is* a change.
+- Everyone reads the final draft. The α result, the crisis-advantage result and
+  the calibration section have all changed since earlier drafts, so anything
+  remembered from before is out of date.
+- **Author contributions statement needs to be made accurate before
+  submission.** It currently describes a division of labour; whoever's name is
+  on a sentence should confirm it is true.
+
+The report body is at the 6-page limit exactly. Anything added now has to
+displace something.
 
 **Deliverable:** 6-page report, references excluded from the limit, IEEE
 template. No poster.

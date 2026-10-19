@@ -2,6 +2,14 @@
 
 *Plan written 11 Oct 2026, updated 12 Oct. Three people: Amirreza, Ali Emre, Filip.*
 
+> **SUPERSEDED, 20 Oct 2026.** Kept as the record of what was planned and
+> pre-registered before the brief appeared — in particular the original research
+> question and the pre-registered hypotheses, which matter for reading the
+> findings honestly. For where the project actually stands, read `GROUP_BRIEF.md`
+> (for the group) or `ORIENTATION.md` (end to end). Two things below are now
+> wrong: the deliverable is a **6-page report with no poster**, and the per-cause
+> calibration measures listed as "later" have been implemented.
+
 **The official guidelines are still not published.** Everything below is built from Lecture 1 (what the deliverable is) and Lecture 8 (how to run and write it). Re-anchor the moment the brief appears.
 
 From Lecture 1, verbatim: 2–3 students, combine your findings, **fill one of the identified gaps**, a concrete research question, theoretical or empirical, **5-page report and a poster**, "a similar grading criteria as lit. review."
@@ -20,7 +28,7 @@ Still unknown: **deadline**, **poster dimensions**, whether references count tow
 | 3. Baselines implemented | **done** — Cox, Fine–Gray, RSF, DeepHit |
 | 4. Experiment grid | **done** — `results/all.csv` and five others |
 | 5. Statistics | **done** — paired bootstrap, Bonferroni, seed and bootstrap variability |
-| 6. 5-page report | **drafted** — compiles at 5 body pages; needs rewriting in your voice |
+| 6. 6-page report | **drafted** — compiles at 6 body pages, the limit exactly; needs rewriting in your voice |
 | 7. Poster | **drafted** — A0 portrait, size unconfirmed |
 | 8. Pre-submission checks | **outstanding** |
 
@@ -56,13 +64,13 @@ That split still holds, and it is how the poster columns should be divided when 
 
 - [ ] **Rewrite the report prose.** The draft is complete and every number is verified, but the rubric penalises text that reads as generated. Read it aloud; vary the rhythm; make the argument sound like three people who argued about it.
 - [ ] **Create the GitHub repo and push.** Local repo is initialised with two commits and a `.gitignore` excluding the licensed data. Needs a remote, then the URL goes into `report/main.tex` and `report/poster.tex` where `[repository URL]` currently sits.
-- [ ] **Confirm the poster size** against the brief. A0 portrait is assumed; change one `geometry` line if wrong.
+- [x] ~~Confirm the poster size against the brief.~~ The brief requires **no poster**; the draft was removed on 20 Oct (recoverable from git history).
 - [ ] **Confirm Alberge's page numbers** (currently PMLR 300:1837–1845, taken from the PMLR record) against Ali's copy.
 - [ ] **Ali and Filip review everything.** Most of this was built in one person's session. Beyond the collaboration requirement, whoever stands at the poster must be able to answer "what is an integrated calibration index?" without reading off the board.
 
 ### Worth doing if there is time
 
-- [ ] Apply Alberge's per-cause calibration measures (CR-D-calibration, cal-αK-calibration) rather than our marginal rescaling.
+- [x] ~~Apply Alberge's per-cause calibration measures.~~ **Done 20 Oct**: AJ-calibration and CR D-calibration are computed and reported. Their *correction* methods are still not applied; our recalibration remains a marginal rescaling.
 - [ ] More than five bootstrap replicates for the variability estimates.
 - [ ] A clinical dataset, if SEER access ever clears, so the group's two clinical reviews are represented.
 

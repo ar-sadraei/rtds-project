@@ -276,8 +276,9 @@ labels and returning a predicted cumulative incidence per cause on a fixed
 horizon grid, so no model can be given a metric the others cannot. We compare the
 Aalen--Johansen estimator as a null model that cannot discriminate but is
 calibrated by construction, a cause-specific Cox model, a Fine--Gray
-subdistribution model, a random survival forest and DeepHit. Two implementation
-details matter for interpretation. Cox and Fine--Gray were implemented directly,
+subdistribution model, and DeepHit via
+\texttt{pycox}~\cite{DBLP:journals/jmlr/KvammeBS19}. Two implementation details
+matter for interpretation. Cox and Fine--Gray were implemented directly,
 since no mainstream Python library provides Fine--Gray; both maximise a Breslow
 partial likelihood, with Fine--Gray retaining subjects who experience the
 competing event in the risk set under the censoring weights
@@ -300,8 +301,10 @@ is measured in two ways: the integrated Brier score for the cumulative incidence
 and a calibration index comparing mean predicted risk against the
 Aalen--Johansen estimate within deciles of predicted risk --- a binned form of
 the integrated calibration index~\cite{austin2019ici}, whose competing-risks
-version smooths the curve rather than binning it~\cite{austin2022icicr}. Cost is
-measured fit and prediction time. Censoring weights come from a Kaplan--Meier
+version smooths the curve rather than binning it~\cite{austin2022icicr}. Because
+that index is conditional at one horizon, we additionally report the two proper
+competing-risks measures of Alberge et al.~\cite{alberge2026calibration} in
+Section~V-C. Cost is measured fit and prediction time. Censoring weights come from a Kaplan--Meier
 estimate fitted on the training set only; because the time origin is origination
 and every vintage has at least eight years of follow-up, $G(60)=0.9986$ in both
 cohorts, so those weights are near one and it is the competing event, not
@@ -415,70 +418,85 @@ scoring next year's originations does not receive.
 \subsection{Calibration is worse in every condition, and rescaling does not repair it}
 \label{sec:calib}
 % EVIDENCE: results/significance_tuned.csv, results/recalibration.csv.
-Where discrimination gives no stable ordering, calibration does. DeepHit's
-calibration index is $0.0040$ worse than the Cox model's in both cohorts. The
-two carry that with very different force --- about eighteen times the models'
-combined training variability post-crisis against 1.7 times on crisis data ---
-so the sign replicates and the size does not. Every curve in
-Fig.~\ref{fig:calib} lies above the diagonal: trained on 2005--06 and tested on
-2007--09, all three models under-predict, and the deciles separate by a few
-percentage points for default against twenty or more for prepayment.
+Where discrimination gives no stable ordering, calibration does. Under our
+decile index DeepHit's calibration is $0.0040$ worse than the Cox model's in
+both cohorts, though the two carry that with very different force --- about
+eighteen times the models' combined training variability post-crisis against
+1.7 times on crisis data. Every curve in Fig.~\ref{fig:calib} lies above the
+diagonal: trained on 2005--06 and tested on 2007--09, all three models
+under-predict, and the deciles separate by a few percentage points for default
+against twenty or more for prepayment.
 
-Following Alberge et al.~\cite{alberge2026calibration}, who show that
-recalibration can improve competing-risks probabilities while preserving
-discrimination, we estimated a marginal per-horizon rescaling two ways
-(Table~\ref{tab:recal}). Fitted on the training vintages, which is all a lender
-has when scoring a new loan, it changes almost nothing and in ten of sixteen
-cells makes calibration worse. Fitted on the test vintages it cuts the index by a
-median factor of 4.2, reaching 14.7 for Fine--Gray on post-crisis default. The
-penalty is therefore not a defective calibration map, or the oracle correction
-would not work; it is the vintage shift, since a rescaling estimated on 2005--06
-cannot know that 2007--09 would turn out worse. Recalibration as demonstrated in
-the literature is an in-distribution procedure, and extending it across vintages
-is an open problem rather than a step we omitted.
+That index is conditional within risk strata at a single horizon, so it measures
+one marginal aspect of a problem that requires integrating across both event
+types and time~\cite{alberge2026calibration}. We therefore also report the two
+measures Alberge et al.\ prove are proper: AJ-calibration, which is marginal
+over events and time, and CR D-calibration, which is
+distributional (Table~\ref{tab:calib}). The second is not in a released version
+of their library and was taken from the authors' open pull
+request.\footnote{\texttt{soda-inria/hazardous} PR~100, branch \texttt{dcal},
+commit \texttt{26e6432}, accessed 20 October 2026.}
 
-\input{tab_recal}
+The three measures agree: DeepHit is the worst-calibrated of the five models
+under both proper measures in both cohorts, and on crisis data its CR
+D-calibration of $0.0270$ is $3.2$ times that of the Aalen--Johansen estimator,
+which assigns every loan the same marginal incidence. A model with no covariates
+produces better probabilities than the deep network. Two readings need care.
+The Aalen--Johansen row is not a modelling failure: that estimator is marginally
+consistent by construction and scores $4\times10^{-5}$ or less when train and
+test share a distribution, so its values here are the vintage shift measured
+directly rather than inferred. And the Kolmogorov--Smirnov test accompanying CR
+D-calibration rejects every model in every cell, including that estimator on a
+random split where it is correct by construction; with 50{,}000 test subjects it
+has power to reject on negligible deviations, so here the score is informative
+and the test is not.
 
-\begin{figure*}[t]
+Following Alberge et al., who show recalibration can improve competing-risks
+probabilities while preserving discrimination, we estimated a marginal
+per-horizon rescaling two ways. Fitted on the training vintages, which is all a
+lender has at scoring time, it changes almost nothing and in ten of sixteen
+cells makes calibration worse; fitted on the test vintages it cuts the index by
+a median factor of 4.2. The penalty is therefore not a
+defective calibration map, or the oracle correction would not work; it is the
+vintage shift, since a rescaling estimated on 2005--06 cannot know that 2007--09
+would turn out worse.
+
+\input{tab_calib}
+
+\begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{fig_calibration}
-\caption{Calibration at 60 months on the crisis cohort (train 2005--06, test
+\includegraphics[width=\columnwidth]{fig_calibration}
+\caption{Calibration at 60 months, crisis cohort (train 2005--06, test
 2007--09). Each point is a decile of predicted risk; the vertical axis is the
-Aalen--Johansen estimate within that decile, so competing events and censoring
-are both accounted for. A model on the diagonal is perfectly calibrated;
-every curve lies above it, so all three under-predict out of time. The deciles
-separate by a few percentage points for default and by twenty or more for
-prepayment, the competing event the credit literature most often censors.}
+Aalen--Johansen estimate within it, so competing events and censoring are both
+accounted for. Legend labels give each model's calibration index. Every curve
+lies above the diagonal: all three under-predict out of time, by a few
+percentage points for default and by twenty or more for prepayment, the
+competing event the credit literature most often censors.}
 \label{fig:calib}
-\end{figure*}
+\end{figure}
 
-\subsection{Cost, and two checks that changed nothing}
+\subsection{Cost, and a check that changed nothing}
 \label{sec:cost}
 % EVIDENCE: results/all.csv (runtime), results/alpha_ablation.csv,
 %   results/significance_tuned.csv (T3).
 The models span three orders of magnitude in training cost. On 150{,}000 loans
 Fine--Gray fits in 0.03 seconds and the cause-specific Cox model in 0.42, against
-36 seconds for the forest and 59 for DeepHit, and the DeepHit search added 14.4
-minutes across the two cohorts against 4.1 for the forest, while the classical
+36 seconds for the forest and 59 for DeepHit; the DeepHit search added 14.4
+minutes across the two cohorts against 4.1 for the forest, and the classical
 models have no search to run. Since the deep model leads nothing reliably, that
-factor of roughly two thousand buys no measured improvement. We report these
-figures because the benchmarking literature generally omits
-them~\cite{wiegrebe2024deep}.
+factor of roughly two thousand buys no measured improvement --- figures the
+benchmarking literature generally omits~\cite{wiegrebe2024deep}.
 
-Two pre-registered checks returned nothing, and both are worth recording. First,
-we expected DeepHit's ranking-loss weight to matter: pooling our forty tuning
-configurations by $\alpha$ suggests validation AUC rising from 0.658 at
-$\alpha=0.1$ to 0.776 at $\alpha=1.0$. Holding architecture, dropout, learning
-rate, batch size and bin count fixed and varying only $\alpha$ over five seeds
-reverses that picture --- the change is $+0.0075$, $+0.0005$, $-0.0673$ and
-$+0.0386$ across the four cells against seed standard deviations of 0.0033,
-0.0018, 0.0103 and 0.0062 --- so the effect is inconsistent in sign and no
+One pre-registered check is worth recording. We expected DeepHit's ranking-loss
+weight to matter: pooling our forty tuning configurations by $\alpha$ suggests
+validation AUC rising from 0.658 at $\alpha=0.1$ to 0.776 at $\alpha=1.0$.
+Varying only $\alpha$ over five seeds, with everything else fixed, reverses
+that: the four cells move between $+0.0386$ and $-0.0673$ against seed standard
+deviations of 0.003 to 0.010, so the effect is inconsistent in sign and no
 setting can be recommended. A marginal taken over a random search is not an
-ablation. Second, we expected that selecting a configuration on validation
-discrimination would cost calibration, and it did not: three of four
-model-by-cohort comparisons differ by less than twice DeepHit's seed-to-seed
-variation, and the one robust effect is a $+0.0101$ AUC gain for the
-configuration chosen on AUC, which is selection working as intended.
+ablation. A second check, on whether selecting configurations by discrimination
+costs calibration, found no effect beyond seed variation.
 
 \section{Discussion, Limitations and Conclusion}
 % LIMITATIONS -- state all of these, they are real:
@@ -502,57 +520,45 @@ deep competing-risks models perform well on mortgage
 data~\cite{DBLP:journals/jors/BlumenstockLS22}. They do perform well under the
 protocol that literature uses. Under rolling origin the advantage does not
 survive, and the matched comparison says why: what produces it is the
-contemporaneity of the training data rather than the model class. An untuned
-deep baseline is not evidence, and neither is a tuned one evaluated on loans
+contemporaneity of the training data rather than the model class. An untuned deep
+baseline is not evidence, and neither is a tuned one evaluated on loans
 originated beside its training set. For a lender who needs a probability rather
 than an ordering, and who scores loans that do not yet exist, three orders of
-magnitude of extra compute are difficult to justify.
+magnitude of extra compute are hard to justify.
 
 Against the quality criteria for quantitative work, reliability is measured
 rather than asserted: every comparison carries a variability estimate from
-seeds, from bootstrap resamples of the test set, and from refitting on resampled
-training vintages. Replicability is the public pipeline. Internal validity rests on varying one factor at a time, which the
-$\alpha$ ablation and the protocol comparison each enforce. Construct validity is the
-paper's subject rather than an assumption: we ask whether discrimination
-measures what it is used to decide. Generalisation is weakest, and bounded by the first
-delimitation above.
+seeds, test-set bootstrap resamples and refits on resampled training vintages.
+Replicability is the public pipeline. Internal validity rests on varying one
+factor at a time, which the $\alpha$ ablation and the matched test each enforce.
+Construct validity is the paper's subject rather than an assumption. Generalisation
+is weakest, and bounded by the first delimitation above.
 
-Within those bounds, several limitations remain. Our recalibration is a marginal
-per-horizon rescaling rather than the per-cause procedures of
-Alberge et al.~\cite{alberge2026calibration}. Training variability is
-estimated from five bootstrap resamples, which conflates sampling with
-optimisation noise. The forest is cause-specific rather than Ishwaran's
-competing-risks formulation. And our covariates are observed at
-origination, so we cannot test directly whether the period-specific structure
-the deep model exploits is the macroeconomic variation that~Bellotti and
+Within those bounds, limitations remain. We report the calibration measures of
+Alberge et al.~\cite{alberge2026calibration} but not their per-cause correction
+methods, so our recalibration stays a marginal rescaling. Training variability
+comes from five bootstrap resamples, conflating sampling with optimisation
+noise. And our covariates are observed at origination, so we cannot test
+directly whether the period-specific structure the deep model exploits is the
+macroeconomic variation that~Bellotti and
 Crook~\cite{DBLP:journals/jors/BellottiC09} model explicitly.
 
 Under a protocol that measures ranking, calibration and cost together on
 time-ordered splits, deep competing-risks models offer no reliable advantage
 over classical or tree-based baselines on mortgage data, and are worse
 calibrated in every condition we tested. What generalises past this benchmark is
-the mechanism rather than the verdict: the advantage these models are reported
-to have is substantially a property of being evaluated on loans contemporaneous
-with their training data, and the same caution applies to any flexible model
-assessed that way.
+the mechanism rather than the verdict: their reported advantage is substantially
+a property of being evaluated on loans contemporaneous with their training data,
+and the same caution applies to any flexible model assessed that way.
 
 \section*{Author Contributions}
 The three reviews were written independently: A.S.\ on competing risks in
 credit scoring, A.E.N.\ on calibration, F.B.\ on evaluation protocol and cost.
-A.S.\ built the pipeline, models and metrics and ran the experiments; A.E.N.\
-specified the calibration measures and recalibration study; F.B.\ the split
-protocol, tuning budget and cost measurement. The gap, hypotheses and final analysis
-were agreed jointly; code at \url{github.com/ar-sadraei/rtds-project}.
+A.S.\ built the pipeline and ran the experiments; A.E.N.\ specified the
+calibration and recalibration study; F.B.\ the split protocol, tuning budget and
+cost measurement. The gap, hypotheses and analysis were agreed jointly. Code:
+\url{github.com/ar-sadraei/rtds-project}.
 
-% The scaffold cites nothing yet (citations live in the section comments), so the
-% bibliography is seeded with \nocite to keep the build valid. DELETE this block
-% once the prose carries real \cite commands.
-\nocite{shang2024survival,wiegrebe2024deep,DBLP:conf/aaai/LeeZYS18,
-  DBLP:journals/jors/BlumenstockLS22,DBLP:journals/jors/DirickCB17,
-  DBLP:journals/jors/FrydmanM22,DBLP:journals/eswa/SaavedraGGK24,
-  DBLP:journals/jmlr/HaiderHDG20,DBLP:journals/bioinformatics/SonabendBV22,
-  DBLP:journals/jors/BellottiC09,DBLP:journals/jors/ThackhamM22,
-  finegray1999subdistribution,DBLP:journals/jmlr/KvammeBS19,alberge2026calibration}
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}

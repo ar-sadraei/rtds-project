@@ -52,6 +52,22 @@ ICI is **+0.0040 worse than Cox in both cohorts**. Whatever the regime, the deep
 
 The direction holds in both, which is what "does not reverse" claims. The crisis *magnitude* is about as weakly supported as the crisis AUC win in finding 4, and now carries the same hedge in the report.
 
+**Confirmed by proper measures, 20 Oct.** The decile index above is not a proper calibration measure for competing risks — it is per-cause and evaluated at one horizon, whereas what must be calibrated is the whole CIF vector across events and time. Both proper measures from Alberge et al. (2026) are now computed, and **all three instruments independently rank DeepHit worst in both cohorts**:
+
+| model | AJ-cal crisis | AJ-cal post | CR-Dcal crisis | CR-Dcal post |
+|---|---|---|---|---|
+| Aalen–Johansen | 0.0096 | 0.0129 | 0.0084 | 0.0980 |
+| Cox | 0.0173 | 0.0075 | 0.0224 | 0.0795 |
+| Fine–Gray | 0.0135 | 0.0081 | 0.0180 | 0.0902 |
+| RSF | 0.0108 | 0.0092 | 0.0101 | 0.1027 |
+| **DeepHit** | **0.0251** | **0.0125** | **0.0270** | **0.1286** |
+
+On crisis data DeepHit's CR D-calibration is **3.2× the Aalen–Johansen estimator's** — a model with no covariates at all produces better probabilities than the deep network.
+
+**Two things not to misread.** The Aalen–Johansen row is not a modelling failure: that estimator is marginally calibrated by construction and scores 1.1×10⁻⁵ (AJ-cal) and 2.5–3.9×10⁻⁵ (CR-Dcal) on a *random* split, so its vintage-split values are the distribution shift measured directly — a ~1000× and ~340–2500× excess. And the KS test accompanying CR D-calibration **rejects every model in every cell**, including that estimator on the random split where it is correct by construction; with 50,000 test subjects it has power to reject on negligible deviations. The score is informative; the test, at this n, is not.
+
+CR D-calibration is not in any released version of `hazardous` — it comes from the authors' open pull request (`soda-inria/hazardous` PR 100, branch `dcal`, commit `26e6432`), which the report states explicitly. This is the one result in the paper that depends on unreleased code.
+
 ### 6. Nothing is gained over a random survival forest
 AUC statistically indistinguishable: **p = 0.968** (crisis), **p = 0.788** (post-crisis), both inside seed noise. On **crisis prepayment** the forest is clearly better: AUC 0.685 vs 0.620, ICI 0.154 vs 0.236.
 
@@ -149,7 +165,7 @@ Fine–Gray 0.03 s, Cox 0.42 s, RSF 36 s, DeepHit 59 s per fit on 150,000 loans 
 2. **Five bootstrap replicates** is a coarse variability estimate, and it conflates sampling with optimisation noise.
 3. **Origination-time covariates only.** No time-varying macroeconomic variables — verified as Bellotti & Crook's contribution, so this is a real gap against the literature.
 4. **Our recalibration is a marginal rescaling**, not the per-cause procedures of Alberge et al. (2026). A stronger correction might close more, though the oracle column suggests the ceiling is set by what is knowable at scoring time.
-5. **No per-cause calibration measure implemented.** Alberge's CR-D-calibration and cal-αK-calibration exist and would be the right addition.
+5. ~~No per-cause calibration measure implemented.~~ **Resolved 20 Oct** — both AJ-calibration and CR D-calibration are now computed and reported. What remains unimplemented is Alberge's *correction* methods (AJ-recalibration, temperature scaling), which is point 4 above. One residual dependency: CR D-calibration runs on an unreleased PR branch, pinned by commit.
 6. **With 150,000 test subjects almost everything is "significant".** Effect sizes against training noise are what matter.
 7. **Our RSF is cause-specific**, not Ishwaran's competing-risks formulation used by Frydman & Matuszyk.
 8. **The bootstrap cannot resolve p below 1/500.** 31 of the 36 computed tests sit on that floor; they are reported as `< 0.002`. Bonferroni was applied within a family of three metrics, not across all 36 tests. Neither touches the negative findings, which rest on p = 0.968 and 0.788.
