@@ -318,21 +318,24 @@ Part 5, (3) overturned a headline claim.
 Same loans. A definitional choice moves the headline number by an order of
 magnitude.
 
-## Finding 4 — DeepHit's advantage depends on the economic regime
+## Finding 4 — ~~DeepHit's advantage depends on the economic regime~~ **RETRACTED 19 Oct**
 
-Tuned DeepHit vs cause-specific Cox, AUC at 60 months, default:
+This was the headline for weeks and it did not survive. It rested on **one
+time-ordered split per cohort**. Running four rolling-origin folds instead —
+expanding the training window a vintage at a time — gives, for DeepHit minus
+cause-specific Cox on crisis defaults:
 
-| cohort | DeepHit | Cox | difference |
-|---|---|---|---|
-| crisis (test 2007–09) | **0.8538** | 0.8346 | **+0.0192** |
-| post-crisis (test 2016–18) | 0.7280 | **0.7372** | **−0.0091** |
+| test vintage | 2006 | 2007 | 2008 | 2009 |
+|---|---|---|---|---|
+| ΔAUC | +0.0013 | +0.0034 | +0.0061 | **+0.0185** |
 
-Both significant. The deep model wins in the crisis regime and loses after it.
+Mean +0.0073, standard deviation 0.0077 across folds. **The +0.0192 we
+published was essentially the 2009 fold** — the most extreme of four.
 
-**The caveat that matters.** Refitting Cox on bootstrap resamples of its own
-training data moves its AUC by **±0.0159**. So the crisis "win" of +0.0192 is
-barely one standard deviation of the baseline's own instability. The post-crisis
-result is clean — every training SD there is below 0.0022.
+Across all eight cause-by-cohort cells, the ratio of mean advantage to its
+spread across folds lies between −1.24 and +0.95. **No model leads reliably in
+any cell, in either direction.** The regime story was an artefact of sampling
+one split.
 
 ## Finding 5 — The calibration penalty does not reverse
 
@@ -420,15 +423,40 @@ Fine–Gray 0.03 s, Cox 0.42 s, RSF 36 s, DeepHit 59 s per fit on 150,000 loans 
 roughly **2,000×** — plus 14.4 minutes of hyperparameter search the classical
 models never need.
 
+## Finding 11 — The advantage comes from training alongside the test loans
+
+**This is now the paper.** Same test loans, same training-set size; only the
+training *period* moves. One arm trains on earlier vintages, the other on the
+remaining half of the later ones.
+
+Training contemporaneously is worth **+0.006 to +0.130 AUC**, and DeepHit's
+bonus is the largest of the four models in three of four cells.
+
+The sharper number is the **difference in differences** — how far DeepHit's lead
+over a baseline moves between the two arms:
+
+| cohort | cause | vs Cox | vs RSF |
+|---|---|---|---|
+| post-crisis | default | +0.0143 | +0.0100 |
+| post-crisis | prepayment | +0.0142 | +0.0084 |
+| crisis | default | **−0.0045** | +0.0108 |
+| crisis | prepayment | +0.0192 | **+0.0787** |
+
+**All eight are significant** (paired bootstrap over the shared test loans,
+B = 500, Bonferroni 0.05/3). Against the forest it is positive in every cell.
+
+So the deep model is not better at predicting forward. It is better at
+exploiting structure specific to the period it trained on — and any protocol
+that hands it that structure will report an advantage a lender never receives.
+
 ## The one-sentence answer
 
-> Under one protocol with time-ordered splits and a documented tuning budget,
-> deep competing-risks models offer **no reliable advantage** over classical or
-> tree-based baselines on mortgage data, are **consistently worse calibrated**,
-> cost roughly **2,000× more**, and depend on the **economic regime** for
-> whatever ranking advantage they show.
-
----
+> Under time-ordered evaluation, deep competing-risks models have **no reliable
+> advantage** over classical or tree-based baselines on mortgage data. The
+> advantage they are reported to have is **substantially a property of being
+> trained on loans originated alongside the loans they are tested on**. Their
+> calibration penalty, unlike their ranking advantage, does not depend on the
+> protocol.
 
 # Part 6 — Alternative explanations we closed off
 
@@ -508,6 +536,15 @@ one was caught by recomputing from the data.
 10. **§IV-E merged two different table cells** into one sentence (the factor of
     14.7 belongs to Fine–Gray on post-crisis default, not to the forest on crisis
     prepayment).
+
+### The biggest one (19 Oct)
+
+11. **"The advantage reverses with regime" was wrong.** It came from one
+    time-ordered split per cohort. Four rolling folds showed the published
+    +0.0192 was the most extreme fold of four, and that no model leads reliably
+    anywhere. This is the single most important correction in the project, and
+    it arrived only because a referee-style read asked what the uncertainty on
+    a sample of one was supposed to be.
 
 ### The audit (12 Oct)
 
