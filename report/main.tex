@@ -44,19 +44,22 @@ A Common-Protocol Benchmark on Mortgage Data}
 %        -> the calibration penalty -> what follows.
 Lenders must state how likely a loan is to default by a given date, not merely
 which loans are riskiest, and a loan can end by default, prepayment or maturity.
-Deep competing-risks models are usually reported on ranking alone. We benchmark
-cause-specific Cox, Fine--Gray, a random survival forest and DeepHit on 550{,}000
-Freddie Mac mortgages under one protocol that measures discrimination,
-calibration and computational cost together, with vintage-ordered splits and a
-tuning budget fixed in advance at twenty configurations for DeepHit and eight
-for the forest. DeepHit's advantage depends on the regime: with
-tuning it beats a cause-specific Cox model by 0.019 AUC on crisis-era loans and
-loses to it by 0.009 on recent ones. Its calibration penalty does not reverse,
-and it never beats a random survival forest. A pooled view of 40 tuning configurations
-appears to show that DeepHit's ranking-loss weight strongly affects both
-discrimination and calibration; a controlled ablation holding architecture fixed
-shows the effect is small and reverses sign across cohorts and causes. We also pre-registered and failed to confirm the hypothesis that
-selecting on discrimination costs calibration.
+Deep competing-risks models are usually reported on ranking alone, and usually
+on splits that let them train on loans originated alongside the loans they are
+tested on. We benchmark cause-specific Cox, Fine--Gray, a random survival forest
+and DeepHit on 550{,}000 Freddie Mac mortgages, measuring discrimination,
+calibration and cost together under a tuning budget fixed in advance. Under
+rolling-origin evaluation no model leads reliably: over four time-ordered folds
+per cohort, every advantage lies within 1.3 standard deviations of its own
+spread across folds, and a single split had made one of them look significant.
+Holding the test loans and the training-set size fixed and moving only the
+training period locates the advantage that remains. Training on contemporaneous
+loans is worth up to 0.13 AUC, is worth more to DeepHit than to the Cox model in
+three of four cells, and is the difference between DeepHit leading the forest in
+every cell and in none. The calibration penalty, by contrast, does not depend on
+the protocol: DeepHit's probabilities sit further from observed frequencies in
+both regimes, and a rescaling estimated on data a lender actually has does not
+repair it.
 \end{abstract}
 
 % =====================================================================
@@ -208,15 +211,14 @@ a new loan, and their probabilities go unchecked.
 The gap follows directly. This research evaluates how much of the reported
 advantage of deep competing-risks models is a property of the way they are
 measured rather than of the models themselves. Our research question is:
-\emph{to what extent does the measured advantage of deep competing-risks models
-over classical ones change when ranking, calibration and cost are evaluated
-together on vintage-ordered splits?} It divides into four sub-questions. How
-does any ranking advantage differ between economic regimes
-(\S\ref{sec:regime})? How much of it survives against a flexible non-deep
-baseline (\S\ref{sec:forest})? What calibration penalty accompanies it, and how
-much of that penalty can recalibration repair (\S\ref{sec:recal})? And how much
-of a reported advantage is attributable to the evaluation protocol itself
-(\S\ref{sec:protocol})?
+\emph{to what extent is the reported advantage of deep competing-risks models
+over classical ones an artefact of the protocol used to evaluate them?} It
+divides into four sub-questions. Does any model lead reliably once the
+time-ordered split is not a single draw (\S\ref{sec:rolling})? How much of a
+reported lead comes from training on loans originated alongside the test loans
+(\S\ref{sec:matched})? What calibration penalty accompanies it, and how much of
+that penalty can recalibration repair (\S\ref{sec:calib})? And what does the
+deep model cost (\S\ref{sec:cost})?
 
 \section{Protocol}
 % RMCSS: name the strategy, state ethics, separate delimitations from limitations.
@@ -317,7 +319,10 @@ Models are trained on earlier origination years and tested on later ones, which
 is how a lender uses them, in contrast to the random splits that dominate the
 literature~\cite{DBLP:journals/jors/BlumenstockLS22}. The post-crisis cohort
 trains on 2013--2015 and tests on 2016--2018; the crisis cohort trains on
-2005--2006 and tests on 2007--2009. Hyperparameters were searched with a budget
+2005--2006 and tests on 2007--2009. Because one such split yields a single
+number, we also evaluate by rolling origin: the training window expands one
+vintage at a time and the next vintage becomes the test set, giving four
+time-ordered folds per cohort. Hyperparameters were searched with a budget
 fixed in advance: twenty random configurations for DeepHit and eight for the
 forest, scored on an out-of-time validation vintage held inside the training
 years, so test vintages were never touched during tuning. Cox and Fine--Gray have no comparable
@@ -342,36 +347,84 @@ twice that as indistinguishable regardless of $p$.
 
 % =====================================================================
 \section{Results}
-
 \input{tab_main}
 
-\subsection{The advantage reverses with regime}
-\label{sec:regime}
-% CLAIM: tuned DeepHit beats Cox on ranking in the crisis cohort and loses to it
-%        post-crisis; it is worse calibrated in both.
-% EVIDENCE (Tables~\ref{tab:main}, \ref{tab:sig}):
-%   crisis      AUC 0.8538 vs 0.8346, +0.0192, significant, outside seed noise
-%   post-crisis AUC 0.7280 vs 0.7372, -0.0091, significant
-%   ICI +0.0040 in BOTH cohorts -- the calibration penalty does not reverse
-DeepHit's standing depends on which economic regime it is tested in
-(Table~\ref{tab:main}). On the crisis cohort the tuned model reaches an AUC of
-0.8538 against 0.8346 for the cause-specific Cox model, a difference of $+0.0192$
-that is significant under the paired bootstrap. That margin should be read with
-care: refitting on five bootstrap resamples of the training vintages gives the
-Cox model a standard deviation of 0.0159 in this cohort and Fine--Gray 0.0206,
-against 0.0035 for DeepHit and 0.0009 for the forest, so the gap is little more
-than one standard deviation of the baseline's own training variability: here the
-classical models are the unstable ones. On the post-crisis cohort the ordering reverses, 0.7280
-against 0.7372, a difference of $-0.0091$ that is also significant
-(Table~\ref{tab:sig}) and, with every training standard deviation below 0.0022
-there, outside the noise. Calibration does not reverse: DeepHit's index is
-0.0040 worse than Cox's in both cohorts (Fig.~\ref{fig:calib}, left). The two
-carry that with very different force, about eighteen times the models' combined
-training variability post-crisis against 1.7 times on crisis data, so the sign
-replicates and the size does not. Every curve in the figure lies above the
-diagonal: calibration here is limited less by model class than by the vintage
-shift.
+\subsection{No model leads reliably once the split is not a single draw}
+\label{sec:rolling}
+% EVIDENCE: results/protocol_decomposition.csv, experiment=="rolling".
+%   Four expanding-window folds per cohort. Per-fold DeepHit-Cox on crisis
+%   default: +0.0013, +0.0034, +0.0061, +0.0185.
+A single time-ordered split gives one number and no sense of how much that
+number moves. Expanding the training window one vintage at a time and testing on
+the next gives four folds per cohort instead (Table~\ref{tab:rolling}).
 
+Across the folds no model leads reliably. DeepHit's advantage over the
+cause-specific Cox model averages $+0.0073$ AUC on crisis defaults with a
+standard deviation of 0.0077 across folds, and the four fold-level values are
+$+0.0013$, $+0.0034$, $+0.0061$ and $+0.0185$: the largest is roughly three
+times the smallest. Against the forest the averages are smaller still. In all
+eight cause-by-cohort cells the ratio of the mean advantage to its spread across
+folds lies between $-1.24$ and $+0.95$, so none would survive a two-sided test
+at any conventional level. The same four models evaluated on one split per
+cohort had produced an apparently significant $+0.0192$ on crisis defaults; that
+figure is the 2009 fold, and it is the most extreme of the four.
+
+\input{tab_rolling}
+
+\subsection{The advantage comes from training alongside the test loans}
+\label{sec:matched}
+% EVIDENCE: results/protocol_decomposition.csv, experiment=="matched".
+%   Test set fixed; training-set size matched; only the period moves.
+If no model leads under time ordering, the question becomes what produces the
+lead that the literature reports. A random split changes two things at once: it
+lets a model train on loans originated alongside the test loans, and it changes
+which loans are tested. We separate them by holding the test set fixed. A random
+half of the later vintages is the test set in both arms; one arm trains on the
+earlier vintages, the other on the remaining half of the later ones, subsampled
+to the same size. Only the training period differs
+(Table~\ref{tab:matched}).
+
+Training on contemporaneous loans is worth between $+0.006$ and $+0.130$ AUC,
+and the gain is larger for DeepHit than for the Cox model in three of the four
+cause-by-cohort cells, by a factor of three on post-crisis default. The
+consequence is visible in the comparison that matters: against the tuned forest,
+DeepHit's advantage is positive in all four cells when training is
+contemporaneous and negative in three of four, negligible in the fourth, when it
+is not. On crisis prepayment the swing is from $+0.0091$ to $-0.0696$.
+
+The flexible model is not better at predicting forward. It is better at
+exploiting structure specific to the period it was trained on, and an evaluation
+protocol that supplies that structure will report an advantage that a lender
+scoring next year's originations does not receive.
+
+\input{tab_matched}
+
+\subsection{Calibration is worse in every condition, and rescaling does not repair it}
+\label{sec:calib}
+% EVIDENCE: results/significance_tuned.csv, results/recalibration.csv.
+Where discrimination gives no stable ordering, calibration does. DeepHit's
+calibration index is $0.0040$ worse than the Cox model's in both cohorts. The
+two carry that with very different force --- about eighteen times the models'
+combined training variability post-crisis against 1.7 times on crisis data ---
+so the sign replicates and the size does not. Every curve in
+Fig.~\ref{fig:calib} lies above the diagonal: trained on 2005--06 and tested on
+2007--09, all three models under-predict, and the deciles separate by a few
+percentage points for default against twenty or more for prepayment.
+
+Following Alberge et al.~\cite{alberge2026calibration}, who show that
+recalibration can improve competing-risks probabilities while preserving
+discrimination, we estimated a marginal per-horizon rescaling two ways
+(Table~\ref{tab:recal}). Fitted on the training vintages, which is all a lender
+has when scoring a new loan, it changes almost nothing and in ten of sixteen
+cells makes calibration worse. Fitted on the test vintages it cuts the index by a
+median factor of 4.2, reaching 14.7 for Fine--Gray on post-crisis default. The
+penalty is therefore not a defective calibration map, or the oracle correction
+would not work; it is the vintage shift, since a rescaling estimated on 2005--06
+cannot know that 2007--09 would turn out worse. Recalibration as demonstrated in
+the literature is an in-distribution procedure, and extending it across vintages
+is an open problem rather than a step we omitted.
+
+\input{tab_recal}
 
 \begin{figure*}[t]
 \centering
@@ -386,129 +439,34 @@ prepayment, the competing event the credit literature most often censors.}
 \label{fig:calib}
 \end{figure*}
 
-\subsection{Nothing is gained over a random survival forest}
-\label{sec:forest}
-% CLAIM: DeepHit and a tuned RSF are indistinguishable on ranking.
-% EVIDENCE: T2 AUC p = 0.968 (crisis), 0.788 (post-crisis); both within seed noise.
-%   On PREPAYMENT in the crisis cohort RSF is clearly better: AUC 0.685 vs 0.620,
-%   ICI 0.154 vs 0.236.
-% MOVES: state the null -> say what a null means here -> the prepayment exception.
-Against a tuned random survival forest, DeepHit offers nothing. The two are
-statistically indistinguishable on discrimination in both cohorts, with $p=0.968$
-on crisis data and $p=0.788$ post-crisis, and both differences fall inside
-DeepHit's own seed variation. These are among the few comparisons in this study
-where we fail to reject: whatever the deep model captures, a
-forest captures as well. On prepayment in the crisis cohort the forest is
-distinctly better, reaching an AUC of 0.685 against 0.620 and a
-calibration index of 0.154 against 0.236 --- the competing event the credit
-literature most often censors (Fig.~\ref{fig:calib}, right).
-
-\subsection{The loss weight is not a reliable knob}
-% CLAIM: across 40 configurations, weighting the ranking loss more heavily makes
-%        BOTH discrimination and calibration worse, monotonically.
-% EVIDENCE (Table~\ref{tab:alpha}): validation AUC rises 0.658 -> 0.776 as alpha
-%   goes 0.1 -> 1.0; IBS improves too. pycox's default alpha = 0.2 sits inside the
-%   harmful range. DeepHit's own paper tunes this weight on validation discrimination.
-DeepHit's loss is a convex combination $\alpha\cdot$likelihood
-$+\,(1-\alpha)\cdot$ranking, and the original model selects this weight on
-validation discrimination~\cite{DBLP:conf/aaai/LeeZYS18}. Pooling our forty
-tuning configurations by $\alpha$ suggests a strong monotone effect, mean
-validation AUC rising from 0.658 at $\alpha=0.1$ to 0.776 at $\alpha=1.0$, but
-that is a marginal over a search in which $\alpha$ varied alongside depth,
-dropout, learning rate, batch size and bin count, and it does not survive control.
-
-Holding everything else fixed and varying only $\alpha$, over five seeds and both
-cohorts, the effect is small and inconsistent in sign (Table~\ref{tab:alpha}). On
-post-crisis default it is invisible in discrimination, $+0.0005$ against a seed
-standard deviation of 0.0018. On crisis prepayment removing the ranking term
-costs 0.067 of AUC and worsens calibration; on post-crisis prepayment it
-\emph{improves} both. Three of the four cause-by-cohort cells show a
-discrimination effect larger than seed noise, and they disagree on direction.
-
-The loss weight is therefore not the dominant hyperparameter the pooled view
-suggested, and no setting can be recommended from these data. The discrepancy
-between the two views is itself the result: a marginal taken over a random
-search is not an ablation.
-
-\input{tab_alpha}
-
-\subsection{Selecting on discrimination does not cost calibration}
-% CLAIM: a hypothesis we pre-specified and did NOT confirm. Say so plainly --
-%        Lecture 8 treats failing to reject as a result.
-% EVIDENCE: T3 -- post-crisis AUC +0.0005 (p = 0.604, within seed noise);
-%   crisis ICI +0.0019 (within seed noise); only the crisis AUC effect (+0.0101)
-%   is robust, and that is selection doing its job.
-We pre-registered the hypothesis that choosing a configuration on validation
-discrimination would yield a worse calibrated model than choosing on a
-probability-accuracy criterion, and did not confirm it. Of four model-by-cohort
-comparisons, three differ by less than twice DeepHit's seed-to-seed variation.
-The one robust effect is a $+0.0101$ AUC gain in the crisis cohort for the
-configuration chosen on AUC, which is selection behaving as intended.
-
-\input{tab_sig}
-
-\input{tab_recal}
-
-\subsection{Recalibration does not help, and why}
-\label{sec:recal}
-Since Alberge et al.~\cite{alberge2026calibration} show that recalibration improves
-competing-risks probabilities while preserving discrimination, we applied a
-marginal per-horizon rescaling in that spirit, estimating it two ways
-(Table~\ref{tab:recal}). Fitted on the training vintages, which is all a lender
-has when scoring a new loan, it changes almost nothing: in ten of sixteen cells
-it leaves the calibration index worse than the raw predictions. Fitted
-instead on the test vintages --- an oracle no lender could build --- it reduces
-the index by a median factor of 4.2, reaching 14.7 for Fine--Gray on post-crisis
-default.
-
-The contrast identifies the penalty. It is not a defective calibration map, or
-the oracle correction would not work; it is the vintage shift, since a rescaling
-estimated on 2005--06 cannot know that 2007--09 would turn out worse.
-Recalibration as demonstrated in the literature is an in-distribution procedure,
-and extending it across vintages is an open problem rather than a step we
-omitted.
-
-\subsection{What the evaluation protocol is worth}
-\label{sec:protocol}
-% EVIDENCE: results/protocol_comparison.csv, src/run_random_split.py.
-%   Same models, same tuned configs, matched train/test sizes; only the split
-%   rule changes. 5 random seeds, seed sd <= 0.0019 on every gap.
-The benchmarking literature evaluates on random splits; we evaluate on
-vintage-ordered ones. Holding models and tuned settings fixed and changing
-only how the test set is drawn isolates what that choice is worth
-(Table~\ref{tab:protocol}). Under random splits DeepHit leads both baselines in
-all eight cause-by-cohort cells, by $+0.0022$ to $+0.0178$ AUC, with no seed
-standard deviation above 0.0019. Under vintage ordering three of those leads
-reverse: DeepHit falls behind Cox on post-crisis default, draws level with the
-forest on crisis default, and loses to it on crisis prepayment by 0.065.
-
-The mechanism is not only leakage. A random split both places temporal
-neighbours of each test loan in the training set and removes the shift between
-origination vintages, and a lender faces neither advantage; the two cannot be
-separated here. Absolute scores do not move in one direction: on post-crisis
-default every model gains $+0.021$ to $+0.033$ AUC, while on crisis default the
-flexible models lose, 2007--09 carrying more default signal than a random draw.
-What moves consistently is the comparison between models, and it moves in
-DeepHit's favour. The tuned configurations were selected on out-of-time
-validation, so the effect is a lower bound.
-
-\input{tab_protocol}
-
-\subsection{Cost}
-% EVIDENCE (Table~\ref{tab:runtime}): Fine--Gray 0.03 s, Cox 0.42 s, RSF 36 s,
-%   DeepHit 59 s -- about 2,000x for no reliable gain. Filip's gap: the
-%   benchmarking literature omits this.
-The models span three orders of magnitude in training cost. On 150{,}000 loans,
+\subsection{Cost, and two checks that changed nothing}
+\label{sec:cost}
+% EVIDENCE: results/all.csv (runtime), results/alpha_ablation.csv,
+%   results/significance_tuned.csv (T3).
+The models span three orders of magnitude in training cost. On 150{,}000 loans
 Fine--Gray fits in 0.03 seconds and the cause-specific Cox model in 0.42, against
 36 seconds for the forest and 59 for DeepHit, and the DeepHit search added 14.4
-minutes of fitting across the two cohorts and the forest search 4.1, while the
-classical models have no search to run. Since the deep model is indistinguishable from the forest and loses to Cox in one of the
-two regimes, that factor of roughly two thousand buys no reliable improvement. We
-report these figures because the benchmarking literature generally omits
+minutes across the two cohorts against 4.1 for the forest, while the classical
+models have no search to run. Since the deep model leads nothing reliably, that
+factor of roughly two thousand buys no measured improvement. We report these
+figures because the benchmarking literature generally omits
 them~\cite{wiegrebe2024deep}.
 
+Two pre-registered checks returned nothing, and both are worth recording. First,
+we expected DeepHit's ranking-loss weight to matter: pooling our forty tuning
+configurations by $\alpha$ suggests validation AUC rising from 0.658 at
+$\alpha=0.1$ to 0.776 at $\alpha=1.0$. Holding architecture, dropout, learning
+rate, batch size and bin count fixed and varying only $\alpha$ over five seeds
+reverses that picture --- the change is $+0.0075$, $+0.0005$, $-0.0673$ and
+$+0.0386$ across the four cells against seed standard deviations of 0.0033,
+0.0018, 0.0103 and 0.0062 --- so the effect is inconsistent in sign and no
+setting can be recommended. A marginal taken over a random search is not an
+ablation. Second, we expected that selecting a configuration on validation
+discrimination would cost calibration, and it did not: three of four
+model-by-cohort comparisons differ by less than twice DeepHit's seed-to-seed
+variation, and the one robust effect is a $+0.0101$ AUC gain for the
+configuration chosen on AUC, which is selection working as intended.
 
-% =====================================================================
 \section{Discussion, Limitations and Conclusion}
 % LIMITATIONS -- state all of these, they are real:
 %   1. one dataset family (US agency mortgages); no clinical replication
@@ -528,12 +486,14 @@ them~\cite{wiegrebe2024deep}.
 % CONCLUSION: the one-sentence answer, then what a lender should take from it.
 Taken together these results qualify, rather than contradict, the finding that
 deep competing-risks models perform well on mortgage
-data~\cite{DBLP:journals/jors/BlumenstockLS22}. DeepHit does win on crisis-era
-loans once tuned, and an untuned deep baseline is not evidence. But the win is
-confined to one regime, disappears against a random survival forest, costs three
-orders of magnitude more compute, and carries a calibration penalty throughout.
-For a lender needing a probability rather than an ordering, that is difficult to
-justify.
+data~\cite{DBLP:journals/jors/BlumenstockLS22}. They do perform well under the
+protocol that literature uses. Under rolling origin the advantage does not
+survive, and the matched comparison says why: what produces it is the
+contemporaneity of the training data rather than the model class. An untuned
+deep baseline is not evidence, and neither is a tuned one evaluated on loans
+originated beside its training set. For a lender who needs a probability rather
+than an ordering, and who scores loans that do not yet exist, three orders of
+magnitude of extra compute are difficult to justify.
 
 Against the quality criteria for quantitative work, reliability is measured
 rather than asserted: every comparison carries a variability estimate from
@@ -549,17 +509,19 @@ per-horizon rescaling rather than the per-cause procedures of
 Alberge et al.~\cite{alberge2026calibration}. Training variability is
 estimated from five bootstrap resamples, which conflates sampling with
 optimisation noise. The forest is cause-specific rather than Ishwaran's
-competing-risks formulation. And excluding the time-varying macroeconomic
-variables of~Bellotti and Crook~\cite{DBLP:journals/jors/BellottiC09} leaves the
-vintage-shift result without a mechanism.
+competing-risks formulation. And our covariates are observed at
+origination, so we cannot test directly whether the period-specific structure
+the deep model exploits is the macroeconomic variation that~Bellotti and
+Crook~\cite{DBLP:journals/jors/BellottiC09} model explicitly.
 
-Under one protocol measuring ranking, calibration and cost together on
-vintage-ordered splits, deep competing-risks models offer no reliable advantage
-over classical or tree-based baselines on mortgage data, are worse calibrated in
-both regimes, and depend on the regime for what ranking advantage they show.
-What generalises past this benchmark is methodological: a
-hyperparameter's apparent effect in a pooled search did not survive controlled
-variation.
+Under a protocol that measures ranking, calibration and cost together on
+time-ordered splits, deep competing-risks models offer no reliable advantage
+over classical or tree-based baselines on mortgage data, and are worse
+calibrated in every condition we tested. What generalises past this benchmark is
+the mechanism rather than the verdict: the advantage these models are reported
+to have is substantially a property of being evaluated on loans contemporaneous
+with their training data, and the same caution applies to any flexible model
+assessed that way.
 
 \section*{Author Contributions}
 The three reviews were written independently: A.S.\ on competing risks in

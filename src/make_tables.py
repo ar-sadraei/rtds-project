@@ -68,8 +68,11 @@ for m in order:
                  f"{g(post,'auc_td')} & {g(post,'ici')} \\\\")
 emit("tab_main", lines,
      caption=("Discrimination (AUC at 60 months) and calibration (decile-binned ICI "
-              "at 60 months) for "
-              "default, on the held-out test vintages of each cohort."),
+              "at 60 months) for default, on the held-out test vintages of each "
+              "cohort. These are single-split figures, given for the levels; "
+              "Section~V-A reports how far they move across time-ordered folds, "
+              "and the differences between models here should be read against "
+              "that spread rather than on their own."),
      label="tab:main", colspec="@{}lrrrr@{}",
      header=(r"& \multicolumn{2}{c}{Crisis (2007--09)} & \multicolumn{2}{c}{Post-crisis (2016--18)} \\"
              "\n" r"\cmidrule(lr){2-3}\cmidrule(lr){4-5}" "\n" r"Model & AUC & ICI & AUC & ICI \\"))
@@ -207,6 +210,60 @@ emit("tab_protocol", lines,
              r"Cause & Cohort & random & vintage & random & vintage \\"),
      colsep="4pt")
 
+# ---------- T9: rolling origin -------------------------------------------
+# Four time-ordered folds per cohort instead of one, so the vintage protocol
+# finally carries an uncertainty estimate of its own.
+pd_ = pd.read_csv("results/protocol_decomposition.csv")
+roll = pd_[pd_.experiment == "rolling"].pivot_table(
+        index=["cohort", "cause", "test_vintage"], columns="model", values="auc")
+roll["dh_cox"] = roll["deephit"] - roll["cause_specific_cox"]
+roll["dh_rsf"] = roll["deephit"] - roll["rsf"]
+g = roll.groupby(level=[0, 1])[["dh_cox", "dh_rsf"]].agg(["mean", "std"])
+lines = []
+for ca in ("default", "prepaid"):
+    for co in ("crisis", "postcrisis"):
+        r = g.loc[(co, ca)]
+        lines.append(f"{SHORT.get(ca,ca)} & {SHORT.get(co,co)} & "
+                     f"{r[('dh_cox','mean')]:+.4f} & {r[('dh_cox','std')]:.4f} & "
+                     f"{r[('dh_rsf','mean')]:+.4f} & {r[('dh_rsf','std')]:.4f} \\\\")
+emit("tab_rolling", lines,
+     caption=("Rolling-origin evaluation. The training window expands one vintage at "
+              "a time and the next vintage is the test set, giving four time-ordered "
+              "folds per cohort. Entries are DeepHit's AUC advantage at 60 months over "
+              "each baseline, averaged over folds, with the standard deviation across "
+              "folds. No advantage reaches 1.3 standard deviations of its own spread."),
+     label="tab:rolling", colspec="@{}llrrrr@{}",
+     header=(r"& & \multicolumn{2}{c}{vs Cox} & \multicolumn{2}{c}{vs RSF} \\"
+             "\n" r"\cmidrule(lr){3-4}\cmidrule(lr){5-6}" "\n"
+             r"Cause & Cohort & mean & sd & mean & sd \\"),
+     colsep="4pt")
+
+# ---------- T10: same test loans, training period moved -------------------
+mt = pd_[pd_.experiment == "matched"].pivot_table(
+        index=["cohort", "cause", "arm"], columns="model", values="auc")
+mt["dh_cox"] = mt["deephit"] - mt["cause_specific_cox"]
+mt["dh_rsf"] = mt["deephit"] - mt["rsf"]
+lines = []
+for ca in ("default", "prepaid"):
+    for co in ("crisis", "postcrisis"):
+        c, e = mt.loc[(co, ca, "contemporaneous")], mt.loc[(co, ca, "earlier")]
+        lines.append(f"{SHORT.get(ca,ca)} & {SHORT.get(co,co)} & "
+                     f"{c.dh_cox:+.4f} & {e.dh_cox:+.4f} & "
+                     f"{c.dh_rsf:+.4f} & {e.dh_rsf:+.4f} \\\\")
+emit("tab_matched", lines,
+     caption=("The same test loans, the same training-set size, and only the training "
+              "period moved. The test set is a random half of the later vintages; one "
+              "arm trains on the earlier vintages, the other on the remaining half of "
+              "the later ones. Entries are DeepHit's AUC advantage at 60 months. "
+              "Against the forest the advantage is positive in every cell when "
+              "training is contemporaneous and negative or negligible in every cell "
+              "when it is not."),
+     label="tab:matched", colspec="@{}llrrrr@{}",
+     header=(r"& & \multicolumn{2}{c}{vs Cox} & \multicolumn{2}{c}{vs RSF} \\"
+             "\n" r"\cmidrule(lr){3-4}\cmidrule(lr){5-6}" "\n"
+             r"Cause & Cohort & contemp. & earlier & contemp. & earlier \\"),
+     colsep="4pt")
+
 print("wrote report/tab_{data,main,sig,alpha,var,recal,protocol}.tex")
-for f in ["tab_data","tab_main","tab_sig","tab_alpha","tab_var","tab_recal","tab_protocol"]:
+for f in ["tab_data","tab_main","tab_sig","tab_alpha","tab_var","tab_recal","tab_protocol","tab_rolling","tab_matched"]:
     print(f"\n--- {f} ---"); print(open(f"{OUT}/{f}.tex").read())
