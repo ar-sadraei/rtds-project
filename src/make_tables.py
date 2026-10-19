@@ -257,7 +257,9 @@ emit("tab_matched", lines,
               "the later ones. Entries are DeepHit's AUC advantage at 60 months. "
               "Against the forest the advantage is positive in every cell when "
               "training is contemporaneous and negative or negligible in every cell "
-              "when it is not."),
+              "when it is not. The change in each advantage between the two arms is "
+              "significant under a paired bootstrap over the shared test loans "
+              "($B=500$, Bonferroni $0.05/3$)."),
      label="tab:matched", colspec="@{}llrrrr@{}",
      header=(r"& & \multicolumn{2}{c}{vs Cox} & \multicolumn{2}{c}{vs RSF} \\"
              "\n" r"\cmidrule(lr){3-4}\cmidrule(lr){5-6}" "\n"

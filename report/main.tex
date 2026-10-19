@@ -56,7 +56,7 @@ Holding the test loans and the training-set size fixed and moving only the
 training period locates the advantage that remains. Training on contemporaneous
 loans is worth up to 0.13 AUC, is worth more to DeepHit than to the Cox model in
 three of four cells, and is the difference between DeepHit leading the forest in
-every cell and in none. The calibration penalty, by contrast, does not depend on
+every cell and trailing it, a change significant in all four. The calibration penalty, by contrast, does not depend on
 the protocol: DeepHit's probabilities sit further from observed frequencies in
 both regimes, and a rescaling estimated on data a lender actually has does not
 repair it.
@@ -391,6 +391,19 @@ consequence is visible in the comparison that matters: against the tuned forest,
 DeepHit's advantage is positive in all four cells when training is
 contemporaneous and negative in three of four, negligible in the fourth, when it
 is not. On crisis prepayment the swing is from $+0.0091$ to $-0.0696$.
+
+Both effects survive inference. Because the two arms predict the same loans, a
+paired bootstrap over those loans resamples them together; with $B=500$ and the
+same Bonferroni threshold used elsewhere, every one of the sixteen
+contemporaneity bonuses is positive with an interval clear of zero, and
+DeepHit's is the largest of the four models in three of the four cells. The
+sharper quantity is the difference in differences --- the change in DeepHit's
+lead over a baseline when training moves from earlier vintages to contemporaneous
+ones --- which is significant in all eight comparisons. Against the forest it is
+positive in every cell, from $+0.0084$ to $+0.0787$, so the improvement in
+DeepHit's relative standing is not a sampling artefact. Against the Cox model it
+is positive in three cells and negative on crisis default, the one cell where
+the classical model gains more from contemporaneity than the deep one does.
 
 The flexible model is not better at predicting forward. It is better at
 exploiting structure specific to the period it was trained on, and an evaluation

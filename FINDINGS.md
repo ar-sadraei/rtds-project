@@ -4,7 +4,9 @@
 
 ## The one-sentence answer
 
-Under a common protocol with time-ordered splits and an equal tuning budget, **DeepHit's advantage over classical competing-risks models exists only in the crisis regime, is no larger than the baseline's own training noise, never beats a random survival forest, and comes with a calibration penalty in every condition we tested.**
+Under time-ordered evaluation **DeepHit has no reliable advantage over classical or tree-based competing-risks models in any cell**, and the advantage it shows under the literature's protocol is **substantially a property of being trained on loans originated alongside the loans it is tested on**. Its calibration penalty, unlike its ranking advantage, does not depend on the protocol.
+
+*Superseded 19 Oct: the earlier one-sentence answer said the advantage "exists only in the crisis regime". Rolling origin shows that was one fold.*
 
 ---
 
@@ -26,15 +28,17 @@ Dirick et al. report 20–85% and 94.56–98.16% on ten European consumer-credit
 ### 3. The definition of default changes the event rate 14×
 90+ days past due gives 4.47%; the disposition-based zero-balance credit event gives 0.31%.
 
-### 4. The advantage reverses with regime — but read the margin carefully
-Tuned DeepHit vs cause-specific Cox, AUC at 60 months, default:
+### 4. ~~The advantage reverses with regime~~ — RETRACTED 19 Oct
 
-| cohort | DeepHit | Cox | diff | significant |
+The original claim rested on **one time-ordered split per cohort**. Four rolling-origin folds per cohort give, for DeepHit minus cause-specific Cox on crisis default:
+
+| test vintage | 2006 | 2007 | 2008 | 2009 |
 |---|---|---|---|---|
-| crisis (test 2007–09) | **0.8538** | 0.8346 | **+0.0192** | yes |
-| post-crisis (test 2016–18) | 0.7280 | **0.7372** | **−0.0091** | yes |
+| ΔAUC | +0.0013 | +0.0034 | +0.0061 | **+0.0185** |
 
-**Caveat that matters** (see finding 8): the crisis gap of +0.0192 is barely one standard deviation of the Cox model's *own* training variability in that cohort (±0.0159). The post-crisis result is clean — every training SD there is below 0.0022.
+Mean +0.0073, sd 0.0077. **The published +0.0192 was the 2009 fold** — the most extreme of four.
+
+Across all eight cause-by-cohort cells the ratio of mean advantage to its spread across folds lies between −1.24 and +0.95. **No model leads reliably, in either direction, anywhere.** See `results/protocol_decomposition.csv`.
 
 ### 5. The calibration penalty does *not* reverse — but only the sign replicates
 ICI is **+0.0040 worse than Cox in both cohorts**. Whatever the regime, the deep model's probabilities sit further from observed frequencies.
@@ -95,31 +99,24 @@ Fitted on the **training** vintages — all a lender has at scoring time — it 
 
 **So the penalty is not a broken calibration map. It is the vintage shift itself: correctable in principle, unavailable in practice.** AUC is identical to four decimals raw vs recalibrated in all 16 cells, confirming the rescaling is monotone.
 
-### 10. The evaluation protocol decides who wins
+### 10. The advantage comes from training alongside the test loans
 
-Same models, same tuned settings, same train/test sizes. The only thing that
-changes is how the test set is drawn. DeepHit's AUC advantage at 60 months:
+Same test loans, same training-set size; only the training *period* moves. One arm trains on earlier vintages, the other on the remaining half of the later ones.
 
-| cause | cohort | vs Cox (random) | vs Cox (vintage) | vs RSF (random) | vs RSF (vintage) |
-|---|---|---|---|---|---|
-| default | crisis | +0.0025 | +0.0192 | +0.0032 | −0.0000 |
-| default | post | +0.0022 | **−0.0091** | +0.0035 | +0.0005 |
-| prepaid | crisis | +0.0178 | +0.0012 | +0.0104 | **−0.0651** |
-| prepaid | post | +0.0139 | +0.0012 | +0.0108 | +0.0048 |
+**Training contemporaneously is worth +0.006 to +0.130 AUC.** All sixteen bonuses are positive with bootstrap intervals clear of zero, and DeepHit's is the largest of the four models in three of four cells.
 
-**Under random splits DeepHit leads in all eight cells. Under vintage ordering
-three of those leads reverse.** Five random seeds; no seed sd above 0.0019.
+The sharper quantity is the **difference in differences** — how much DeepHit's lead over a baseline changes between arms:
 
-Be careful about the mechanism: a random split removes *both* temporal leakage
-*and* the vintage shift, and we cannot separate them. Absolute scores do not all
-move one way — post-crisis default every model gains 0.021–0.033 AUC from random
-splitting, but on crisis default the two flexible models lose, because 2007–09
-carries more default signal than a random draw. What moves consistently is the
-*comparison between models*, and it moves in DeepHit's favour. The tuned configs
-were chosen on out-of-time validation, so this is a lower bound.
+| cohort | cause | vs Cox | vs RSF |
+|---|---|---|---|
+| post-crisis | default | +0.0143 | +0.0100 |
+| post-crisis | prepaid | +0.0142 | +0.0084 |
+| crisis | default | **−0.0045** | +0.0108 |
+| crisis | prepaid | +0.0192 | +0.0787 |
 
-This is the one result that is not a replication of Blumenstock et al., who used
-ten random splits. See `results/protocol_comparison.csv`, `src/run_random_split.py`.
+**All eight significant** at Bonferroni 0.05/3, paired bootstrap over the shared test loans, B=500. Against the forest it is positive in every cell: DeepHit's standing improves with contemporaneous training, and that is not a sampling artefact. The one negative cell is crisis default against Cox, where the classical model gains more.
+
+So the deep model is not better at predicting forward; it is better at exploiting period-specific structure. See `results/matched_bootstrap.csv`, `src/run_matched_bootstrap.py`.
 
 ### 11. Cost spans three orders of magnitude
 Fine–Gray 0.03 s, Cox 0.42 s, RSF 36 s, DeepHit 59 s per fit on 150,000 loans — roughly **2,000×** — plus 14.4 minutes of hyperparameter search the classical models never need.
