@@ -15,7 +15,7 @@ WHAT THIS PRODUCES
     competing-risks structure.
 
 INPUT
-    data/raw/sample_YYYY.zip -- the Freddie Mac Single-Family Loan-Level Dataset
+    data/banking/0_raw/sample_YYYY.zip -- the Freddie Mac Single-Family Loan-Level Dataset
     sample files. Each zip holds two pipe-delimited files with no header row:
         sample_orig_YYYY.txt   one row per loan   (31 fields)
         sample_perf_YYYY.txt   one row per loan per month (35 fields, ~475 MB)
@@ -26,10 +26,10 @@ INPUT
     instead of silently shifting every column.
 
 OUTPUT
-    data/processed/financial_competing_risks.csv
+    data/banking/1_merged/financial_competing_risks.csv
 
 USAGE
-    python3 src/prepare_financial_data.py                      # defaults below
+    python3 src/prepare_financial_data.py                      # settings in section 1
     python3 src/prepare_financial_data.py --max-rows 100000
     python3 src/prepare_financial_data.py --years 2016 2017 2018 --max-follow-up 0
 
@@ -88,11 +88,21 @@ from pathlib import Path
 
 import pandas as pd
 
-PROJECT = Path(__file__).resolve().parents[1]
-RAW = PROJECT / "data" / "raw"
-OUT = PROJECT / "data" / "processed"
+# ----------------------------------------------------------------------------------------
+# 1. Folders and settings (edit these; the command line options below override them)
+# ----------------------------------------------------------------------------------------
+RAW_DIR = Path("data/banking/0_raw")  # holds sample_YYYY.zip, not renamed
+OUTPUT_FILE = Path("data/banking/1_merged/financial_competing_risks.csv")
 
-# --- file layout ----------------------------------------------------------
+YEARS = [2013, 2014, 2015, 2016, 2017, 2018]  # origination years to include
+MAX_ROWS = 50_000  # row cap, sampled evenly across years; 0 keeps everything
+MAX_FOLLOW_UP = 60  # censor every loan at this age in months; 0 keeps full follow-up
+SEED = 0  # random seed for the subsample, so the CSV is reproducible
+DROP_MISSING_DTI = False  # True drops loans with no DTI instead of flagging them
+
+# ----------------------------------------------------------------------------------------
+# 2. File layout and columns
+# ----------------------------------------------------------------------------------------
 # Asserted at parse time: if Freddie Mac changes the layout, fail loudly.
 N_ORIG_FIELDS = 31
 N_PERF_FIELDS = 35
@@ -100,46 +110,48 @@ N_PERF_FIELDS = 35
 # Origination file: 0-based field index -> column name. These are the fields we
 # keep; everything else in the 31 is dropped.
 ORIG_FIELDS = {
-    0:  "fico",            # credit score at origination
-    2:  "first_time_buyer",
-    5:  "mi_pct",          # mortgage insurance coverage %
-    6:  "n_units",
-    7:  "occupancy",       # P owner-occupied, S second home, I investment
-    8:  "cltv",            # combined loan-to-value
-    9:  "dti",             # debt-to-income
-    10: "orig_upb",        # original unpaid principal balance
-    11: "ltv",             # loan-to-value
-    12: "orig_rate",       # interest rate
-    13: "channel",         # R retail, B broker, C correspondent
+    0: "fico",  # credit score at origination
+    2: "first_time_buyer",
+    5: "mi_pct",  # mortgage insurance coverage %
+    6: "n_units",
+    7: "occupancy",  # P owner-occupied, S second home, I investment
+    8: "cltv",  # combined loan-to-value
+    9: "dti",  # debt-to-income
+    10: "orig_upb",  # original unpaid principal balance
+    11: "ltv",  # loan-to-value
+    12: "orig_rate",  # interest rate
+    13: "channel",  # R retail, B broker, C correspondent
     16: "state",
     17: "property_type",
     19: "loan_id",
-    20: "loan_purpose",    # P purchase, C cash-out refi, N no-cash-out refi
-    21: "orig_term",       # months
+    20: "loan_purpose",  # P purchase, C cash-out refi, N no-cash-out refi
+    21: "orig_term",  # months
     22: "n_borrowers",
 }
 
 # Performance file: 0-based field indices we read while streaming.
 P_LOAN_ID, P_DELINQ, P_AGE, P_ZB_CODE = 0, 3, 4, 8
 
-DELINQ_DEFAULT = 3          # months past due that counts as default
-ZB_PREPAID = "01"           # zero balance code: prepaid or matured
-ZB_CREDIT = {"02", "03", "09", "15"}   # disposition codes meaning a credit loss
+DELINQ_DEFAULT = 3  # months past due that counts as default
+ZB_PREPAID = "01"  # zero balance code: prepaid or matured
+ZB_CREDIT = {"02", "03", "09", "15"}  # disposition codes meaning a credit loss
 
-# --- cleaning rules -------------------------------------------------------
+# ----------------------------------------------------------------------------------------
+# 3. Cleaning rules
+# ----------------------------------------------------------------------------------------
 # sentinel: the value Freddie Mac writes to mean "not available"
 # lo, hi:   the range outside which a value is impossible, not merely unusual
 NUMERIC_RULES = {
-    "fico":        {"sentinel": {"9999"}, "lo": 300,  "hi": 850},
-    "cltv":        {"sentinel": {"999"},  "lo": 1,    "hi": 200},
-    "dti":         {"sentinel": {"999"},  "lo": 1,    "hi": 65},
-    "ltv":         {"sentinel": {"999"},  "lo": 1,    "hi": 200},
-    "mi_pct":      {"sentinel": {"999"},  "lo": 0,    "hi": 55},
-    "orig_upb":    {"sentinel": set(),    "lo": 1000, "hi": 10_000_000},
-    "orig_rate":   {"sentinel": set(),    "lo": 0.1,  "hi": 15.0},
-    "orig_term":   {"sentinel": set(),    "lo": 1,    "hi": 480},
-    "n_units":     {"sentinel": {"99"},   "lo": 1,    "hi": 4},
-    "n_borrowers": {"sentinel": {"99"},   "lo": 1,    "hi": 10},
+    "fico": {"sentinel": {"9999"}, "lo": 300, "hi": 850},
+    "cltv": {"sentinel": {"999"}, "lo": 1, "hi": 200},
+    "dti": {"sentinel": {"999"}, "lo": 1, "hi": 65},
+    "ltv": {"sentinel": {"999"}, "lo": 1, "hi": 200},
+    "mi_pct": {"sentinel": {"999"}, "lo": 0, "hi": 55},
+    "orig_upb": {"sentinel": set(), "lo": 1000, "hi": 10_000_000},
+    "orig_rate": {"sentinel": set(), "lo": 0.1, "hi": 15.0},
+    "orig_term": {"sentinel": set(), "lo": 1, "hi": 480},
+    "n_units": {"sentinel": {"99"}, "lo": 1, "hi": 4},
+    "n_borrowers": {"sentinel": {"99"}, "lo": 1, "hi": 10},
 }
 
 # A loan missing any of these is dropped: they are the core predictors, they are
@@ -157,11 +169,28 @@ REQUIRED = ["fico", "ltv", "orig_upb", "orig_rate", "orig_term"]
 
 # Column order in the output CSV.
 OUTPUT_COLS = [
-    "loan_id", "vintage", "time", "event", "default_zb_alt",
-    "fico", "ltv", "cltv", "dti", "dti_missing", "orig_upb", "orig_rate", "orig_term",
-    "mi_pct", "n_units", "n_borrowers",
-    "first_time_buyer", "occupancy", "channel", "loan_purpose",
-    "property_type", "state",
+    "loan_id",
+    "vintage",
+    "time",
+    "event",
+    "default_zb_alt",
+    "fico",
+    "ltv",
+    "cltv",
+    "dti",
+    "dti_missing",
+    "orig_upb",
+    "orig_rate",
+    "orig_term",
+    "mi_pct",
+    "n_units",
+    "n_borrowers",
+    "first_time_buyer",
+    "occupancy",
+    "channel",
+    "loan_purpose",
+    "property_type",
+    "state",
 ]
 
 
@@ -202,9 +231,12 @@ def read_origination(zf: zipfile.ZipFile, year: int) -> pd.DataFrame:
     with zf.open(f"sample_orig_{year}.txt") as fh:
         return pd.read_csv(
             io.TextIOWrapper(fh, encoding="latin-1"),
-            sep="|", header=None, names=names,
+            sep="|",
+            header=None,
+            names=names,
             usecols=list(ORIG_FIELDS.values()),
-            dtype=str, keep_default_na=False,
+            dtype=str,
+            keep_default_na=False,
         )
 
 
@@ -243,16 +275,21 @@ def scan_performance(zf: zipfile.ZipFile, year: int) -> tuple[dict, int]:
             rec = loans.get(loan_id)
             if rec is None:
                 rec = loans[loan_id] = {
-                    "last_age": age, "default_age": None,
-                    "prepaid_age": None, "zb_credit": False,
+                    "last_age": age,
+                    "default_age": None,
+                    "prepaid_age": None,
+                    "zb_credit": False,
                 }
             elif age > rec["last_age"]:
                 rec["last_age"] = age
 
             # first time this loan hits 90+ days past due
             months_late = delinquency_to_months(fields[P_DELINQ])
-            if (months_late is not None and months_late >= DELINQ_DEFAULT
-                    and rec["default_age"] is None):
+            if (
+                months_late is not None
+                and months_late >= DELINQ_DEFAULT
+                and rec["default_age"] is None
+            ):
                 rec["default_age"] = age
 
             zb = fields[P_ZB_CODE].strip()
@@ -275,9 +312,15 @@ def resolve_events(loans: dict, max_follow_up: int) -> pd.DataFrame:
     """
     rows = []
     for loan_id, r in loans.items():
-        default_age, prepaid_age, last = r["default_age"], r["prepaid_age"], r["last_age"]
+        default_age, prepaid_age, last = (
+            r["default_age"],
+            r["prepaid_age"],
+            r["last_age"],
+        )
 
-        if default_age is not None and (prepaid_age is None or default_age <= prepaid_age):
+        if default_age is not None and (
+            prepaid_age is None or default_age <= prepaid_age
+        ):
             time, event = default_age, 1
         elif prepaid_age is not None:
             time, event = prepaid_age, 2
@@ -301,12 +344,12 @@ def resolve_events(loans: dict, max_follow_up: int) -> pd.DataFrame:
 
 def parse_vintage(year: int, max_follow_up: int) -> pd.DataFrame:
     """Build the one-row-per-loan table for a single origination year."""
-    zip_path = RAW / f"sample_{year}.zip"
+    zip_path = RAW_DIR / f"sample_{year}.zip"
     if not zip_path.exists():
         raise FileNotFoundError(
             f"{zip_path} not found. Download the {year} sample file from "
             f"https://www.freddiemac.com/research/datasets/sf-loanlevel-dataset "
-            f"and put the zip in data/raw/ without renaming it."
+            f"and put the zip in {RAW_DIR}/ without renaming it."
         )
 
     with zipfile.ZipFile(zip_path) as zf:
@@ -330,7 +373,9 @@ def parse_vintage(year: int, max_follow_up: int) -> pd.DataFrame:
     return df
 
 
-def clean(df: pd.DataFrame, drop_missing_dti: bool = False) -> tuple[pd.DataFrame, list[str]]:
+def clean(
+    df: pd.DataFrame, drop_missing_dti: bool = False
+) -> tuple[pd.DataFrame, list[str]]:
     """
     Apply the cleaning rules and return the cleaned frame plus a written report.
 
@@ -347,7 +392,8 @@ def clean(df: pd.DataFrame, drop_missing_dti: bool = False) -> tuple[pd.DataFram
             n_sentinel = df[col].isin(rule["sentinel"]).sum()
             if n_sentinel:
                 report.append(
-                    f"  {col:<13} {n_sentinel:>7,} sentinel values -> missing")
+                    f"  {col:<13} {n_sentinel:>7,} sentinel values -> missing"
+                )
             df[col] = df[col].where(~df[col].isin(rule["sentinel"]))
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
@@ -357,7 +403,8 @@ def clean(df: pd.DataFrame, drop_missing_dti: bool = False) -> tuple[pd.DataFram
         if outside.any():
             report.append(
                 f"  {col:<13} {outside.sum():>7,} outside [{rule['lo']}, "
-                f"{rule['hi']}] -> missing")
+                f"{rule['hi']}] -> missing"
+            )
             df.loc[outside, col] = pd.NA
 
     # 3. DTI: record missingness as its own column rather than dropping the row.
@@ -368,7 +415,8 @@ def clean(df: pd.DataFrame, drop_missing_dti: bool = False) -> tuple[pd.DataFram
     if n_dti:
         report.append(
             f"  {'dti':<13} {n_dti:>7,} missing -> kept, flagged in dti_missing "
-            f"({n_dti/len(df):.1%} of rows)")
+            f"({n_dti/len(df):.1%} of rows)"
+        )
 
     required = list(REQUIRED) + (["dti"] if drop_missing_dti else [])
 
@@ -380,7 +428,8 @@ def clean(df: pd.DataFrame, drop_missing_dti: bool = False) -> tuple[pd.DataFram
             if n:
                 report.append(f"  {col:<13} {n:>7,} missing (required)")
         report.append(
-            f"  -> dropped {missing_required.sum():,} rows missing a required covariate")
+            f"  -> dropped {missing_required.sum():,} rows missing a required covariate"
+        )
         df = df[~missing_required]
 
     # 5. structural checks on the outcome itself
@@ -391,7 +440,9 @@ def clean(df: pd.DataFrame, drop_missing_dti: bool = False) -> tuple[pd.DataFram
 
     bad_event = ~df.event.isin([0, 1, 2])
     if bad_event.any():
-        report.append(f"  -> dropped {bad_event.sum():,} rows with an invalid event code")
+        report.append(
+            f"  -> dropped {bad_event.sum():,} rows with an invalid event code"
+        )
         df = df[~bad_event]
 
     n_dup = df.loan_id.duplicated().sum()
@@ -399,8 +450,9 @@ def clean(df: pd.DataFrame, drop_missing_dti: bool = False) -> tuple[pd.DataFram
         report.append(f"  -> dropped {n_dup:,} duplicate loan_id rows")
         df = df[~df.loan_id.duplicated()]
 
-    report.append(f"  kept {len(df):,} of {n_start:,} loans "
-                  f"({len(df)/n_start:.1%})")
+    report.append(
+        f"  kept {len(df):,} of {n_start:,} loans " f"({len(df)/n_start:.1%})"
+    )
     return df, report
 
 
@@ -433,9 +485,14 @@ def subsample(df: pd.DataFrame, max_rows: int, seed: int) -> pd.DataFrame:
         remaining = df[~df.loan_id.isin(set(out.loan_id))]
         if len(remaining):
             out = pd.concat(
-                [out, remaining.sample(n=min(shortfall, len(remaining)),
-                                       random_state=seed)],
-                ignore_index=True)
+                [
+                    out,
+                    remaining.sample(
+                        n=min(shortfall, len(remaining)), random_state=seed
+                    ),
+                ],
+                ignore_index=True,
+            )
 
     return out.sort_values(["vintage", "loan_id"]).reset_index(drop=True)
 
@@ -453,17 +510,26 @@ def describe(df: pd.DataFrame) -> None:
         print(f"  {name:<10} {counts[code]:>8,}   {share[code]:>6.2%}")
 
     print("\nby origination year")
-    tab = pd.crosstab(df.vintage, df.event.map({0: "censored", 1: "default", 2: "prepaid"}))
+    tab = pd.crosstab(
+        df.vintage, df.event.map({0: "censored", 1: "default", 2: "prepaid"})
+    )
     print(tab.to_string())
 
     print("\nfollow-up time (months)")
-    print(f"  median {df.time.median():.0f}   mean {df.time.mean():.1f}   "
-          f"max {df.time.max():.0f}")
+    print(
+        f"  median {df.time.median():.0f}   mean {df.time.mean():.1f}   "
+        f"max {df.time.max():.0f}"
+    )
 
     print("\nnumeric covariates")
     num = [c for c in NUMERIC_RULES if c in df.columns]
-    print(df[num].describe().T[["count", "mean", "std", "min", "max"]]
-          .round(2).to_string())
+    print(
+        df[num]
+        .describe()
+        .T[["count", "mean", "std", "min", "max"]]
+        .round(2)
+        .to_string()
+    )
 
     n_missing = df.isna().sum()
     n_missing = n_missing[n_missing > 0]
@@ -477,29 +543,54 @@ def describe(df: pd.DataFrame) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(
-        description="Build the financial competing-risks CSV from Freddie Mac data.")
-    ap.add_argument("--years", type=int, nargs="+",
-                    default=[2013, 2014, 2015, 2016, 2017, 2018],
-                    help="origination years to include (needs data/raw/sample_YYYY.zip)")
-    ap.add_argument("--max-rows", type=int, default=50_000,
-                    help="row cap; 0 keeps everything. Sampled evenly across years.")
-    ap.add_argument("--max-follow-up", type=int, default=60,
-                    help="censor every loan at this age in months; 0 keeps full follow-up")
-    ap.add_argument("--seed", type=int, default=0,
-                    help="random seed for the subsample, so the CSV is reproducible")
-    ap.add_argument("--drop-missing-dti", action="store_true",
-                    help="drop loans with no reported DTI instead of flagging them. "
-                         "This removes ~10%% of loans and removes far more from the "
-                         "early vintages than the late ones -- read the note on "
-                         "REQUIRED before using it.")
-    ap.add_argument("--out", default="financial_competing_risks",
-                    help="output filename stem under data/processed/")
+        description="Build the financial competing-risks CSV from Freddie Mac data."
+    )
+    ap.add_argument(
+        "--years",
+        type=int,
+        nargs="+",
+        default=YEARS,
+        help="origination years to include (needs sample_YYYY.zip in RAW_DIR)",
+    )
+    ap.add_argument(
+        "--max-rows",
+        type=int,
+        default=MAX_ROWS,
+        help="row cap; 0 keeps everything. Sampled evenly across years.",
+    )
+    ap.add_argument(
+        "--max-follow-up",
+        type=int,
+        default=MAX_FOLLOW_UP,
+        help="censor every loan at this age in months; 0 keeps full follow-up",
+    )
+    ap.add_argument(
+        "--seed",
+        type=int,
+        default=SEED,
+        help="random seed for the subsample, so the CSV is reproducible",
+    )
+    ap.add_argument(
+        "--drop-missing-dti",
+        action="store_true",
+        default=DROP_MISSING_DTI,
+        help="drop loans with no reported DTI instead of flagging them. "
+        "This removes ~10%% of loans and removes far more from the "
+        "early vintages than the late ones -- read the note on "
+        "REQUIRED before using it.",
+    )
+    ap.add_argument("--out", type=Path, default=OUTPUT_FILE, help="output CSV file")
     args = ap.parse_args()
 
     print(f"years         {args.years}")
-    print(f"max rows      {args.max_rows:,}" if args.max_rows else "max rows      (all)")
-    print(f"follow-up     {args.max_follow_up} months"
-          if args.max_follow_up else "follow-up     (full)")
+    print(
+        f"max rows      {args.max_rows:,}" if args.max_rows else "max rows      (all)"
+    )
+    print(
+        f"follow-up     {args.max_follow_up} months"
+        if args.max_follow_up
+        else "follow-up     (full)"
+    )
     print(f"seed          {args.seed}\n")
 
     parts = []
@@ -517,14 +608,16 @@ def main() -> None:
         print(line)
 
     if args.max_rows and len(df) > args.max_rows:
-        print(f"\nsubsampling {len(df):,} -> {args.max_rows:,} "
-              f"(stratified by year, seed {args.seed})")
+        print(
+            f"\nsubsampling {len(df):,} -> {args.max_rows:,} "
+            f"(stratified by year, seed {args.seed})"
+        )
         df = subsample(df, args.max_rows, args.seed)
 
     df = df[[c for c in OUTPUT_COLS if c in df.columns]]
 
-    OUT.mkdir(parents=True, exist_ok=True)
-    path = OUT / f"{args.out}.csv"
+    path = args.out
+    path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(path, index=False)
 
     describe(df)
