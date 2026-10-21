@@ -23,20 +23,46 @@ it can never prepay, and the reverse — that mutual exclusion is the competing
 risk. Prepayment is roughly 18× more common than default here, so treating
 prepaid loans as merely "censored" would discard most of the outcomes.
 
+## Environment
+
+**Keep the virtualenv outside iCloud.** A venv inside the iCloud-synced project
+folder is ~36,000 files; syncing them makes Python startup take minutes.
+
+```bash
+python3 -m venv ~/venvs/rtds
+~/venvs/rtds/bin/pip install -r requirements.txt comprisk \
+  "git+https://github.com/soda-inria/hazardous.git@26e64323fb462cc283bf145f3e37af4f78e1a5d4"
+```
+
+That hazardous commit is **PR #100** (`soda-inria/hazardous`), which adds
+CR D-calibration — the proper distributional calibration measure for competing
+risks. It is not in any release. It reports its version as `0.2.0`, identical to
+the released package, so **pin the commit or nobody can tell which one they
+have**. Everything in the release is also present in it.
+
+Note that `comprisk` caps `numba<0.66`, so installing it moves numba and numpy
+back a version from what `requirements.txt` pins. After installing, check
+nothing broke:
+
+```bash
+~/venvs/rtds/bin/python -c "import torch, numpy; from pycox.models import DeepHit; from comprisk import FineGrayRegression; from hazardous.metrics import d_cr_calibration; print('ok', torch.__version__, numpy.__version__)"
+```
+
 ## Build it
 
 ```bash
-python3 src/prepare_financial_data.py
+~/venvs/rtds/bin/python src/prepare_financial_data.py
 ```
 
-Needs `data/raw/sample_YYYY.zip` for each year. `DATA.md` says where to get
-them. Output: `data/processed/financial_competing_risks.csv`.
+Needs `data/banking/0_raw/sample_YYYY.zip` for each year. `DATA.md` says where
+to get them. Output: `data/banking/1_merged/financial_competing_risks.csv`.
+Both paths are set at the top of the script.
 
 Defaults: 2013–2018, 50,000 loans, follow-up cut at 60 months, seed 0.
 
 ```bash
-python3 src/prepare_financial_data.py --max-rows 250000     # larger
-python3 src/prepare_financial_data.py --years 2016 2017 2018 --max-follow-up 36
+~/venvs/rtds/bin/python src/prepare_financial_data.py --max-rows 250000
+~/venvs/rtds/bin/python src/prepare_financial_data.py --years 2016 2017 2018 --max-follow-up 36
 ```
 
 The script prints a cleaning report before it writes. That report is the audit
