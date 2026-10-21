@@ -42,6 +42,40 @@ python3 src/prepare_financial_data.py --years 2016 2017 2018 --max-follow-up 36
 The script prints a cleaning report before it writes. That report is the audit
 trail — read it rather than trusting the file.
 
+## Vendored model code (`vendor/`)
+
+Two of the four models have no usable PyPI release, so their source is
+committed here rather than installed.
+
+| | upstream | pinned commit |
+|---|---|---|
+| Deep Survival Machines | `github.com/Jeanselme/DeepSurvivalMachines` | `b29ab6dda51066e5c0b1b1f02e8bd7baca875094` |
+| Neural Fine-Gray | `github.com/Jeanselme/NeuralFineGray` | `9ec6e3cacf7ddda09b02ee3af06a9e3b430ad8a1` |
+
+Both MIT licensed; the `LICENSE` files are retained. Removed from the vendored
+copies: the upstream `.git` directories, DSM's example datasets
+(`dsm/datasets/*.csv`, 4.6 MB of Framingham/PBC/SUPPORT data we never load) and
+its generated HTML docs. Nothing on the import path touches any of them.
+
+```python
+import sys
+sys.path.insert(0, "vendor/nfg/DeepSurvivalMachines")   # DSM
+sys.path.insert(0, "vendor/nfg")                        # Neural Fine-Gray
+from dsm import DeepSurvivalMachines
+```
+
+**Both require float64 input.** Passing float32 fails with
+`RuntimeError: mat1 and mat2 must have the same dtype`, which is not documented
+upstream. They share a base class, so the same applies to both.
+
+**Do not `pip install auton-survival` to get DSM.** That package is a 2023
+snapshot pinned to `pandas<2.0` and `torch<2.0`. It cannot coexist with
+`comprisk` (which needs `pandas>=2.0`), and installing it drags torch back two
+major versions and breaks DeepHit. The vendored source above is the same model.
+
+Neural Fine-Gray is vendored but not currently used; it came with the same
+clone and is kept in case the model set changes.
+
 ## The data is not in this repository
 
 The Freddie Mac dataset is free for academic use but **may not be
