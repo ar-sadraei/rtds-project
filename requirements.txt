@@ -1,23 +1,53 @@
+# Install everything in one go:
+#     python3 -m venv ~/venvs/rtds        # keep the venv OUT of the iCloud folder
+#     ~/venvs/rtds/bin/pip install -r requirements.txt
+#
+# Three things here are deliberate; please do not "fix" them:
+#
+# 1. hazardous is a git URL, not a version pin. CR D-calibration (the proper
+#    distributional calibration measure for competing risks) is not in any
+#    release -- it lives in soda-inria/hazardous PR #100. That build reports
+#    its version as 0.2.0, identical to the released package, so the commit
+#    hash is the only way to tell them apart. `hazardous==0.2.0` would silently
+#    install the release and d_cr_calibration would be missing.
+#
+# 2. numba and numpy sit below latest because comprisk requires numba<0.66,
+#    and numba 0.65.1 requires numpy<2.5.
+#
+# 3. pandas is 2.x, not 3.x, because lifelines (pulled in by hazardous)
+#    requires pandas<3.0. The data pipeline was checked on both and produces
+#    identical output.
+#
+# Do NOT add auton-survival. It pins pandas<2.0 and torch<2.0, cannot coexist
+# with comprisk, and would break DeepHit. Deep Survival Machines is vendored
+# in vendor/nfg/DeepSurvivalMachines instead.
+autograd==1.9.1
+autograd-gamma==0.5.0
 black==26.10.1
 brotli==1.2.0
 certifi==2026.10.19
 charset-normalizer==3.5.2
 click==8.5.0
 cloudpickle==3.1.2
+comprisk==0.8.0
 contourpy==1.4.0
 cycler==0.12.1
 ecos==2.0.14
 feather-format==0.4.1
 filelock==4.2.4
 fonttools==4.67.0
+formulaic==1.2.2
 fsspec==2026.9.0
 h5py==3.16.0
+hazardous @ git+https://github.com/soda-inria/hazardous.git@26e64323fb462cc283bf145f3e37af4f78e1a5d4
 idna==3.20
 inflate64==1.0.4
+interface_meta==2.0.1
 Jinja2==3.1.6
 joblib==1.6.0
 kiwisolver==1.5.1
-llvmlite==0.50.0
+lifelines==0.30.3
+llvmlite==0.47.0
 MarkupSafe==3.0.4
 matplotlib==3.11.2
 mpmath==1.3.0
@@ -25,12 +55,12 @@ multivolumefile==0.2.3
 mypy_extensions==1.1.0
 narwhals==2.27.1
 networkx==3.7
-numba==0.68.0
+numba==0.65.1
 numexpr==2.14.2
-numpy==2.5.4
+numpy==2.4.6
 osqp==1.1.3
 packaging==26.3
-pandas==3.0.6
+pandas==2.3.3
 pathspec==1.1.1
 pillow==13.0.0
 platformdirs==4.13.5
@@ -44,6 +74,7 @@ pyparsing==3.3.3
 pyppmd==1.3.1
 python-dateutil==2.9.0.post0
 pytokens==0.4.1
+pytz==2026.5
 requests==2.34.2
 scikit-learn==1.9.1
 scikit-survival==0.28.0
@@ -55,5 +86,8 @@ texttable==1.7.2
 threadpoolctl==3.7.0
 torch==2.14.1
 torchtuples==0.2.2
+tqdm==4.70.1
 typing_extensions==4.16.0
+tzdata==2026.5
 urllib3==2.8.0
+wrapt==2.5.2rc1
