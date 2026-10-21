@@ -97,16 +97,37 @@ test-on-later split meaningful.
 | default | 1 | first month with delinquency status ≥ 3 (90+ days past due), or `RA` (property repossessed) |
 | prepaid | 2 | zero-balance code `01`, if it occurs before any default |
 
-**Default is defined by delinquency, not by final disposition.** The alternative
-is to wait for a zero-balance code recording how the loan actually ended, which
-arrives months or years later and only for some loans. The 90-day definition is
-observed earlier and much more consistently. Blumenstock et al. (2022) use the
-same definition on this dataset.
+**Default is defined by delinquency, not by final disposition**, and the
+threshold is **90 days**. That is the data owner's own convention for this
+product: FHFA and Freddie Mac report "seriously delinquent" loans as those 90
+or more days past due or in foreclosure, and it is the headline credit metric
+in their monthly volume summaries. It also matches the general Basel/CRR
+reference definition of default.
 
-This choice is not neutral — it changes the default rate substantially — so
-`default_zb_alt` carries the disposition-based version in a separate column.
+Two thresholds we deliberately did not use:
+
+- **180 days.** US capital regulation ([12 CFR 3.101](https://www.law.cornell.edu/cfr/text/12/3.101))
+  puts a *residential mortgage* exposure in default at 180 days, and Basel's
+  IRB approach allows 180 for retail exposures secured by residential real
+  estate. That threshold exists for sizing regulatory capital, which is not
+  what we are modelling. Worth stating in any write-up, because a reader from
+  a credit-risk background will expect 180.
+- **Any delinquency.** Peng and Lessmann (2026, arXiv:2601.20533) use this on
+  these same sample files and call it "an early-delinquency definition" as
+  against "a conventional default definition based on the Basel criterion".
+  Different question.
+
+**This choice moves the default rate by a factor of 12** — 1.7–5.3% per vintage
+at 90 days, against 0.1–0.6% if you wait for a credit-loss disposition code.
+Only ~7% of 90-day delinquencies reach such a disposition within 60 months; the
+rest cure or are still in process. `default_zb_alt` carries the
+disposition-based version in a separate column so the choice stays testable.
+
 If anyone asks why your default rate differs from a published figure, this is
-usually the reason.
+the first place to look. In particular, do **not** cite Blumenstock et al.
+(2022) for the 90-day rule: their reported rates on this dataset (0.1% for
+2013, 0.0% for 2016–17) are far too low for it, their online companion does not
+state what they used, and the main paper is paywalled and unchecked.
 
 ## Follow-up window
 
