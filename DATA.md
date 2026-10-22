@@ -1,6 +1,6 @@
 # Dataset card — financial competing-risks table
 
-*Built by `src/prepare_financial_data.py`.*
+*Built by `src/0_prepare_financial_data.py`.*
 
 ## Source
 
@@ -81,11 +81,11 @@ not be mistaken for a bug.
 
 ```bash
 # calm
-python3 src/prepare_financial_data.py --years 2013 2014 2015 2016 2017 2018 \
+python3 src/0_prepare_financial_data.py --years 2013 2014 2015 2016 2017 2018 \
   --max-rows 55000 --out data/banking/1_merged/financial_calm_2013_2018.csv
 
 # crisis
-python3 src/prepare_financial_data.py --years 2005 2006 2007 2008 2009 \
+python3 src/0_prepare_financial_data.py --years 2005 2006 2007 2008 2009 \
   --max-rows 55000 --out data/banking/1_merged/financial_crisis_2005_2009.csv
 ```
 
@@ -94,9 +94,9 @@ each origination year so no vintage dominates.
 
 ```bash
 # other sizes / windows
-python3 src/prepare_financial_data.py --max-rows 250000
-python3 src/prepare_financial_data.py --years 2016 2017 2018 --max-follow-up 36
-python3 src/prepare_financial_data.py --max-rows 0 --max-follow-up 0   # everything
+python3 src/0_prepare_financial_data.py --max-rows 250000
+python3 src/0_prepare_financial_data.py --years 2016 2017 2018 --max-follow-up 36
+python3 src/0_prepare_financial_data.py --max-rows 0 --max-follow-up 0   # everything
 ```
 
 The script prints a cleaning report and a per-column value summary before it
@@ -206,7 +206,7 @@ observation length alone. Pass `--max-follow-up 0` to keep full follow-up.
 
 ### Medical data
 
-The medical data (NHANES, built by `src/prepare_medical_data.py`) is cut at the
+The medical data (NHANES, built by `src/0_prepare_medical_data.py`) is cut at the
 same 72 months, in `HORIZON_MONTHS`. All ten survey cycles (1999 to 2018) are kept.
 After cleaning there are 52,235 people.
 
