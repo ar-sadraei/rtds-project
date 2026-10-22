@@ -51,9 +51,9 @@ They share no loans, and the same protocol is applied to each.
 |---|---|---|
 | origination years | 2013–2018 | 2005–2009 |
 | loans | 55,000 (9,167 per vintage) | 55,000 (11,000 per vintage) |
-| default | 3.48% | 7.79% |
-| prepaid | 53.10% | 57.42% |
-| censored at 60 months | 43.42% | 34.80% |
+| default | 3.97% | 8.71% |
+| prepaid | 60.65% | 65.20% |
+| censored at 72 months | 35.38% | 26.09% |
 | DTI not reported | 10.2% | 4.1% |
 | file | `financial_calm_2013_2018.csv` | `financial_crisis_2005_2009.csv` |
 
@@ -89,7 +89,7 @@ python3 src/prepare_financial_data.py --years 2005 2006 2007 2008 2009 \
   --max-rows 55000 --out data/banking/1_merged/financial_crisis_2005_2009.csv
 ```
 
-Both use a 60-month window and seed 0, and draw an equal number of loans from
+Both use a 72-month window and seed 0, and draw an equal number of loans from
 each origination year so no vintage dominates.
 
 ```bash
@@ -164,19 +164,43 @@ Two thresholds we deliberately did not use:
 
 **This choice moves the default rate by a factor of 12** — 1.7–5.3% per vintage
 at 90 days, against 0.1–0.6% if you wait for a credit-loss disposition code.
-Only ~7% of 90-day delinquencies reach such a disposition within 60 months; the
+Only ~7% of 90-day delinquencies reach such a disposition within the window; the
 rest cure or are still in process. `default_zb_alt` carries the
 disposition-based version in a separate column so the choice stays testable.
 
 If anyone asks why your default rate differs from a published figure, this is
-the first place to look. In particular, do **not** cite Blumenstock et al.
-(2022) for the 90-day rule: their reported rates on this dataset (0.1% for
-2013, 0.0% for 2016–17) are far too low for it, their online companion does not
-state what they used, and the main paper is paywalled and unchecked.
+the first place to look.
+
+**Blumenstock et al. (2022) use the same definition** on this dataset: *"Default
+is defined as a loan turning into 3-month delinquency for the first time"*
+(§3.1). So the 90-day rule is citable, and our event definition matches the
+study whose conclusions we are testing.
+
+One number in their paper looks like it contradicts this and does not. Their
+Table 1 reports default shares of 0.1% for 2013 and 0.0% for 2016–17, far below
+our 1.7–5.3%. That table is a **per-calendar-year** distribution of event
+occurrences, not a per-vintage cumulative default rate — a loan contributes to
+the year in which the event falls, not to its origination year. The two
+quantities are not comparable, and an earlier version of this file wrongly
+inferred from them that Blumenstock used a stricter definition.
 
 ## Follow-up window
 
-By default every loan is censored at **60 months**. A 2013 loan has been
+**Why 72.** Three reasons, none of which is "it is a round number":
+
+1. It captures the large majority of what ever happens. Within the available
+   follow-up, 72 months covers 87% of defaults and 86% of prepayments, against
+   76% and 76% at 60 months. Going further hits diminishing returns.
+2. It fits inside the follow-up available in every cohort. The binding
+   constraints are the newest mortgage vintage (2018, 99 months observable) and
+   the newest survey cycle (2013-14, 85 months). 84 months would also fit but
+   leaves a one-month margin on the clinical side.
+3. Blumenstock et al. (2022) evaluate at 24, 48 and 72 months on this dataset,
+   so our horizons line up with the study whose conclusions we are testing.
+   They do not justify the choice themselves -- reasons 1 and 2 are ours -- but
+   matching them makes the results directly comparable.
+
+By default every loan is censored at **72 months**. A 2013 loan has been
 observed far longer than a 2018 one; without a common cut, `time` means a
 different thing for each vintage and any comparison across them is confounded by
 observation length alone. Pass `--max-follow-up 0` to keep full follow-up.
@@ -197,5 +221,5 @@ observation length alone. Pass `--max-follow-up 0` to keep full follow-up.
    as default risk does. This makes the crisis cohort a genuinely larger
    distribution shift, but it means no result from it can be attributed to
    default risk alone.
-5. **Censoring is light at 60 months**, because most loans prepay first. The
+5. **Censoring is light at 72 months**, because most loans prepay first. The
    competing risk, not censoring, is what shapes this data.

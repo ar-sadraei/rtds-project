@@ -68,12 +68,12 @@ loans and the same protocol is applied to each.
 | | calm 2013–2018 | crisis 2005–2009 |
 |---|---|---|
 | loans | 55,000 | 55,000 |
-| default | 3.48% | 7.79% |
-| prepaid | 53.10% | 57.42% |
-| censored | 43.42% | 34.80% |
+| default | 3.97% | 8.71% |
+| prepaid | 60.65% | 65.20% |
+| censored | 35.38% | 26.09% |
 
 Both need `data/banking/0_raw/sample_YYYY.zip` for every year in range;
-`DATA.md` says where to get them. Both use a 60-month window, seed 0, and draw
+`DATA.md` says where to get them. Both use a 72-month window, seed 0, and draw
 an equal number of loans per origination year.
 
 **Why two cohorts.** The claim under test is that the evaluation protocol
@@ -138,6 +138,6 @@ late ones and confound any train-early / test-later comparison. If your model
 cannot take an empty value, impute from the **training fold only** — imputing
 from the whole file leaks test information into training.
 
-**Follow-up is cut at 60 months.** A 2013 loan has been observed far longer than
+**Follow-up is cut at 72 months.** A 2013 loan has been observed far longer than
 a 2018 one. Without a common cut, `time` means something different for each
 year. `--max-follow-up 0` keeps full follow-up.

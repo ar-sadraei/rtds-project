@@ -45,19 +45,33 @@ FOUR DECISIONS:
    tested rather than assumed.
 
    WHY 90 DAYS, GIVEN THAT THERE IS NO SINGLE STANDARD.
-   We use 90+ days because that is the data owner's own convention for this
-   exact product: FHFA and Freddie Mac report "seriously delinquent" loans as
-   those 90 or more days past due or in foreclosure, which is the headline
-   credit metric in their monthly volume summaries. It also matches the
-   general Basel/CRR reference definition of default.
+   Three reasons, in order of weight.
+
+   It is the data owner's own convention for this exact product: FHFA and
+   Freddie Mac report "seriously delinquent" loans as those 90 or more days
+   past due or in foreclosure, which is the headline credit metric in their
+   monthly volume summaries.
+
+   It is what Blumenstock et al. (2022) use on this dataset -- "Default is
+   defined as a loan turning into 3-month delinquency for the first time"
+   (section 3.1) -- so our event definition matches the study whose
+   conclusions we are testing.
+
+   It also matches the general Basel/CRR reference definition of default.
+
+   Not the US capital rule, which puts a residential mortgage in default at
+   180 days (12 CFR 3.101), and not Peng and Lessmann (2026, arXiv:2601.20533),
+   who count any delinquency on these same sample files and call that "an
+   early-delinquency definition". The threshold moves the event rate by an
+   order of magnitude, so it is stated rather than assumed.
 
 
-2. FOLLOW-UP IS CUT AT A FIXED AGE (default 60 months).
+2. FOLLOW-UP IS CUT AT A FIXED AGE (default 72 months).
    A loan from 2013 has been observed for far longer than one from 2018. Without
    a cut, "time" would mean something different for each vintage and any
    comparison across vintages would be confounded by observation length alone.
    Cutting every loan at the same age makes them comparable: anything that had
-   not happened by month 60 is recorded as censored at 60. This is ordinary
+   not happened by month 72 is recorded as censored at 72. This is ordinary
    administrative censoring. Pass --max-follow-up 0 to keep full follow-up.
 
 3. SUBSAMPLING IS STRATIFIED BY ORIGINATION YEAR.
@@ -102,7 +116,7 @@ OUTPUT_FILE = Path("data/banking/1_merged/financial_competing_risks.csv")
 
 YEARS = [2013, 2014, 2015, 2016, 2017, 2018]  # origination years to include
 MAX_ROWS = 50_000  # row cap, sampled evenly across years; 0 keeps everything
-MAX_FOLLOW_UP = 60  # censor every loan at this age in months; 0 keeps full follow-up
+MAX_FOLLOW_UP = 72  # censor every loan at this age in months; 0 keeps full follow-up
 SEED = 0  # random seed for the subsample, so the CSV is reproducible
 DROP_MISSING_DTI = False  # True drops loans with no DTI instead of flagging them
 
