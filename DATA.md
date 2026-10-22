@@ -42,14 +42,55 @@ a nuisance: **prepayment is far more common than default**. Treating prepaid
 loans as merely "censored" — which single-event survival analysis does — throws
 away the majority of the outcomes and biases the default estimate upward.
 
+## The two cohorts
+
+The financial data is built as **two disjoint cohorts**, not one pooled set.
+They share no loans, and the same protocol is applied to each.
+
+| | calm | crisis |
+|---|---|---|
+| origination years | 2013–2018 | 2005–2009 |
+| loans | 55,000 (9,167 per vintage) | 55,000 (11,000 per vintage) |
+| default | 3.48% | 7.79% |
+| prepaid | 53.10% | 57.42% |
+| censored at 60 months | 43.42% | 34.80% |
+| DTI not reported | 10.2% | 4.1% |
+| file | `financial_calm_2013_2018.csv` | `financial_crisis_2005_2009.csv` |
+
+**Why two.** The hypothesis under test is that evaluation protocol matters
+*because the population shifts between training and test*. That predicts a
+larger effect when the shift is larger. The two cohorts are a dose
+manipulation of exactly that, with everything else held fixed — same models,
+same metrics, same window, same sample size, same equal-per-vintage draw.
+
+Default rate by origination year shows the contrast:
+
+```
+calm     2013 1.7%   2014 1.6%   2015 2.9%   2016 4.1%   2017 5.3%   2018 5.2%
+crisis   2005 6.4%   2006 10.2%  2007 12.9%  2008 7.6%   2009 1.8%
+```
+
+The calm cohort drifts monotonically over roughly a 3x range. The crisis
+cohort swings over a 7x range **and reverses**: 2009 loans default less often
+than 2005 loans, because they were underwritten after the collapse to much
+tighter standards. A time-ordered split on the crisis cohort therefore tests on
+an *easier* population, which is the opposite of the usual intuition and should
+not be mistaken for a bug.
+
 ## Build
 
 ```bash
-python3 src/prepare_financial_data.py
+# calm
+python3 src/prepare_financial_data.py --years 2013 2014 2015 2016 2017 2018 \
+  --max-rows 55000 --out data/banking/1_merged/financial_calm_2013_2018.csv
+
+# crisis
+python3 src/prepare_financial_data.py --years 2005 2006 2007 2008 2009 \
+  --max-rows 55000 --out data/banking/1_merged/financial_crisis_2005_2009.csv
 ```
 
-Defaults: origination years 2013–2018, 50,000 loans, follow-up cut at 60 months,
-seed 0. Output: `data/processed/financial_competing_risks.csv`.
+Both use a 60-month window and seed 0, and draw an equal number of loans from
+each origination year so no vintage dominates.
 
 ```bash
 # other sizes / windows
@@ -58,8 +99,12 @@ python3 src/prepare_financial_data.py --years 2016 2017 2018 --max-follow-up 36
 python3 src/prepare_financial_data.py --max-rows 0 --max-follow-up 0   # everything
 ```
 
-The script prints a cleaning report — what it dropped and why — before writing.
-Read it. It is the audit trail for the file you hand to the group.
+The script prints a cleaning report and a per-column value summary before it
+writes. Read them. They are the audit trail for the file you hand to the group,
+and the value summary is what catches a category that exists in one cohort and
+not the other — `channel` code `T` (third-party origination) appears in the
+early vintages and is absent from 2013 onward, which matters when the feature
+is encoded.
 
 ## Columns
 
@@ -147,5 +192,10 @@ observation length alone. Pass `--max-follow-up 0` to keep full follow-up.
 3. **Agency loans only.** These conform to Freddie Mac's underwriting standards,
    so the credit quality range is narrower than the whole mortgage market. No
    subprime.
-4. **Censoring is light at 60 months**, because most loans prepay first. The
+4. **In the crisis cohort both competing events shift, not only default.**
+   Interest rates collapsed from 2008, so prepayment behaviour changes as much
+   as default risk does. This makes the crisis cohort a genuinely larger
+   distribution shift, but it means no result from it can be attributed to
+   default risk alone.
+5. **Censoring is light at 60 months**, because most loans prepay first. The
    competing risk, not censoring, is what shapes this data.

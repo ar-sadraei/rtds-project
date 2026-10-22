@@ -173,6 +173,39 @@ NUMERIC_RULES = {
 # it. See --drop-missing-dti to override.
 REQUIRED = ["fico", "ltv", "orig_upb", "orig_rate", "orig_term"]
 
+# Meaning of the coded columns, printed at the end of the run.
+CODE_LABELS = {
+    "first_time_buyer": {"Y": "yes", "N": "no", "9": "not available"},
+    "occupancy": {
+        "P": "owner occupied",
+        "S": "second home",
+        "I": "investment",
+        "9": "not available",
+    },
+    "channel": {
+        "R": "retail",
+        "B": "broker",
+        "C": "correspondent",
+        "T": "third party origination",
+        "9": "not available",
+    },
+    "loan_purpose": {
+        "P": "purchase",
+        "C": "cash-out refinance",
+        "N": "no cash-out refinance",
+        "9": "not available",
+    },
+    "property_type": {
+        "SF": "single family",
+        "CO": "condo",
+        "PU": "planned unit",
+        "MH": "manufactured housing",
+        "CP": "co-op",
+        "99": "not available",
+    },
+    "dti_missing": {0: "dti reported", 1: "dti not reported"},
+}
+
 # Column order in the output CSV.
 OUTPUT_COLS = [
     "loan_id",
@@ -564,6 +597,39 @@ def describe(df: pd.DataFrame) -> None:
         .round(2)
         .to_string()
     )
+
+    # Coded columns, printed the way prepare_medical_data.py prints its
+    # VALUE_LABELS: every level a column actually takes, with its count. This is
+    # what you scan to catch a sentinel that slipped through or a category that
+    # appears in one vintage and not another.
+    print("\ncoded columns, observed values")
+    coded = [
+        c
+        for c in (
+            "first_time_buyer",
+            "occupancy",
+            "channel",
+            "loan_purpose",
+            "property_type",
+            "dti_missing",
+        )
+        if c in df.columns
+    ]
+    for col in coded:
+        vc = df[col].value_counts(dropna=False)
+        print(f"  {col}")
+        for val, n in vc.items():
+            label = CODE_LABELS.get(col, {}).get(val, "")
+            shown = "(missing)" if pd.isna(val) else str(val)
+            print(f"    {shown:<4} {label:<26} {n:>7,}   {n/len(df):>6.1%}")
+
+    if "state" in df.columns:
+        top = df.state.value_counts()
+        print(
+            f"  state\n    {top.index[0]} is the most common of "
+            f"{df.state.nunique()} states, {top.iloc[0]:,} loans "
+            f"({top.iloc[0]/len(df):.1%})"
+        )
 
     n_missing = df.isna().sum()
     n_missing = n_missing[n_missing > 0]

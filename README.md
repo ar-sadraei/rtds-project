@@ -50,23 +50,41 @@ nothing broke:
 
 ## Build it
 
-```bash
-~/venvs/rtds/bin/python src/prepare_financial_data.py
-```
-
-Needs `data/banking/0_raw/sample_YYYY.zip` for each year. `DATA.md` says where
-to get them. Output: `data/banking/1_merged/financial_competing_risks.csv`.
-Both paths are set at the top of the script.
-
-Defaults: 2013–2018, 50,000 loans, follow-up cut at 60 months, seed 0.
+The financial data is **two disjoint cohorts**, not one dataset. They share no
+loans and the same protocol is applied to each.
 
 ```bash
-~/venvs/rtds/bin/python src/prepare_financial_data.py --max-rows 250000
-~/venvs/rtds/bin/python src/prepare_financial_data.py --years 2016 2017 2018 --max-follow-up 36
+# calm: ordinary drift
+~/venvs/rtds/bin/python src/prepare_financial_data.py \
+  --years 2013 2014 2015 2016 2017 2018 --max-rows 55000 \
+  --out data/banking/1_merged/financial_calm_2013_2018.csv
+
+# crisis: a structural break
+~/venvs/rtds/bin/python src/prepare_financial_data.py \
+  --years 2005 2006 2007 2008 2009 --max-rows 55000 \
+  --out data/banking/1_merged/financial_crisis_2005_2009.csv
 ```
 
-The script prints a cleaning report before it writes. That report is the audit
-trail — read it rather than trusting the file.
+| | calm 2013–2018 | crisis 2005–2009 |
+|---|---|---|
+| loans | 55,000 | 55,000 |
+| default | 3.48% | 7.79% |
+| prepaid | 53.10% | 57.42% |
+| censored | 43.42% | 34.80% |
+
+Both need `data/banking/0_raw/sample_YYYY.zip` for every year in range;
+`DATA.md` says where to get them. Both use a 60-month window, seed 0, and draw
+an equal number of loans per origination year.
+
+**Why two cohorts.** The claim under test is that the evaluation protocol
+matters *because the population shifts between training and test*. That
+predicts a bigger effect when the shift is bigger, so the two cohorts
+manipulate the size of the shift while holding everything else fixed. Default
+rates drift over roughly a 3x range in the calm cohort and a 7x range in the
+crisis one.
+
+The script prints a cleaning report and a per-column value summary before
+writing. Read them rather than trusting the file.
 
 ## Vendored model code (`vendor/`)
 
@@ -112,8 +130,9 @@ to the group directly.
 ## Two things to know before modelling
 
 **DTI has missing values on purpose.** Freddie Mac did not report it
-consistently before 2016 — missing for 28.8% of 2013 loans against 1.0% of 2018
-loans. Those rows are kept with `dti` empty and `dti_missing` set, rather than
+consistently in the earlier years — missing for 28.8% of 2013 loans against
+1.0% of 2018 loans, and for 10.2% of the calm cohort against 4.1% of the crisis
+cohort. Those rows are kept with `dti` empty and `dti_missing` set, rather than
 dropped, because dropping them would filter the early years far harder than the
 late ones and confound any train-early / test-later comparison. If your model
 cannot take an empty value, impute from the **training fold only** — imputing
