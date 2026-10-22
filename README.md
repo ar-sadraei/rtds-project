@@ -6,7 +6,7 @@ Filip Becic.
 
 This repository holds **only the financial dataset pipeline**. It turns the raw
 Freddie Mac mortgage files into one clean CSV with a competing-risks outcome,
-for use alongside the clinical dataset (NHANES).
+for use alongside the medical dataset (NHANES).
 
 ## What a competing-risks dataset is
 

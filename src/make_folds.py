@@ -161,45 +161,51 @@ def build(
 
 
 def main() -> None:
-    out_dir = Path("results/folds")
-    out_dir.mkdir(parents=True, exist_ok=True)
     specs = []
 
-    for fname, label in (
-        ("financial_calm_2013_2018.csv", "financial-calm"),
-        ("financial_crisis_2005_2009.csv", "financial-crisis"),
-    ):
-        p = Path("data/banking/1_merged") / fname
+    # Each file must already have an event column and a group column
+    # (label, file, group column, id column, folder for the folds)
+    datasets = (
+        (
+            "financial-calm",
+            "data/banking/1_merged/financial_calm_2013_2018.csv",
+            "vintage",
+            "loan_id",
+            "data/banking/2_folds",
+        ),
+        (
+            "financial-crisis",
+            "data/banking/1_merged/financial_crisis_2005_2009.csv",
+            "vintage",
+            "loan_id",
+            "data/banking/2_folds",
+        ),
+        (
+            "medical",
+            "data/medical/2_preprocessed/nhanes_preprocessed.csv",
+            "cycle",
+            "participant_id",
+            "data/medical/3_folds",
+        ),
+    )
+
+    for label, file, group_col, id_col, folder in datasets:
+        p = Path(file)
         if not p.exists():
             print(f"  skipping {label}: {p} not found")
             continue
-        d = pd.read_csv(p).sort_values(["vintage", "loan_id"]).reset_index(drop=True)
-        specs.append(build(d, "vintage", "event", label))
-
-    p = Path("data/medical/1_merged/nhanes_merged.csv")
-    if p.exists():
-        d = pd.read_csv(p)
-        # medical event/time are not in the merged file yet; derive here so the
-        # folds can be checked. This must move into the medical pipeline.
-        CUT = 72
-        d["event"] = np.where(
-            (d.mortality_status == 1) & (d.followup_months <= CUT),
-            np.where(
-                d.cause_of_death.isin([1, 5]), 1, np.where(d.cause_of_death == 2, 2, 3)
-            ),
-            0,
-        )
-        d = (
-            d[d.cycle <= "2013-2014"]
-            .sort_values(["cycle", "participant_id"])
-            .reset_index(drop=True)
-        )
-        specs.append(build(d, "cycle", "event", "clinical"))
+        d = pd.read_csv(p).sort_values([group_col, id_col]).reset_index(drop=True)
+        spec = build(d, group_col, "event", label)
+        if spec is not None:
+            spec["folder"] = folder
+        specs.append(spec)
 
     if any(s is None for s in specs):
         raise SystemExit("\nfold verification failed, nothing written")
 
     for s in specs:
+        out_dir = Path(s.pop("folder"))
+        out_dir.mkdir(parents=True, exist_ok=True)
         path = out_dir / f"{s['name']}.json"
         path.write_text(json.dumps(s))
         print(f"\nwrote {path}  ({len(s['temporal'])} folds per arm)")

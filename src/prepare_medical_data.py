@@ -5,10 +5,8 @@ and print a preview. These people are removed: under MIN_AGE_YEARS, without a mo
 status, without a smoked_100_cigarettes answer, smokers without a smokes_now answer, and
 people who died without a cause of death, without a follow-up time, and with a refused
 or "don't know" smoking answer.
-Then the steps run in this order, each one printing what it does:
-  1. recode the columns and build the time and event labels (no statistics from the data),
-  2. split the rows two ways: stratified k-fold and time-series cross-validation,
-  3. standardize the age inside each fold, using that fold's training rows only.
+Then the columns are recoded and the time and event labels are built (follow-up cut at
+HORIZON_MONTHS). The age is not scaled here, it is scaled inside each fold.
 
 Edit the folders and column lists below, then run:  python src/prepare_medical_data.py
 File names do not matter. Every .xpt (or .xpt.txt) file in a survey folder and every
@@ -18,9 +16,7 @@ File names do not matter. Every .xpt (or .xpt.txt) file in a survey folder and e
 import sys
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
-from sklearn.model_selection import StratifiedKFold
 
 # ----------------------------------------------------------------------------------------
 # 1. Folders (edit these)
@@ -31,24 +27,12 @@ MORTALITY_DIR = Path("data/medical/0_raw/mortality")
 MERGED_FILE = Path("data/medical/1_merged/nhanes_merged.csv")
 # Recoded, age not scaled yet
 PREPROCESSED_FILE = Path("data/medical/2_preprocessed/nhanes_preprocessed.csv")
-# One folder per split type, age scaled per fold
-SPLITS_DIR = Path("data/medical/3_splits")
 
 # Mortality is only linked for adults
 MIN_AGE_YEARS = 20
 
 # Cut follow-up at this many months
-HORIZON_MONTHS = 60
-
-# Stratified k-fold (main question)
-N_FOLDS = 5
-SEED = 0
-
-# Time-series cross-validation (sub question 1)
-# Cycles in the first training window
-TS_MIN_TRAIN_CYCLES = 4
-# Cycles in each test window
-TS_TEST_CYCLES = 2
+HORIZON_MONTHS = 72
 
 # ----------------------------------------------------------------------------------------
 # 2. Columns to keep: original name -> new name. Everything else is dropped.
@@ -255,10 +239,10 @@ def show_preview(df: pd.DataFrame) -> None:
 
 
 # ----------------------------------------------------------------------------------------
-# Step 1: recode the columns
+# Recoding
 # ----------------------------------------------------------------------------------------
 def recode(df: pd.DataFrame) -> pd.DataFrame:
-    print("\n=== Step 1: recoding ===")
+    print("\n=== Recoding ===")
     out = df[["participant_id", "cycle"]].copy()
 
     out["sex_female"] = (df["sex"] == 2).astype(int)
@@ -297,9 +281,9 @@ def recode(df: pd.DataFrame) -> pd.DataFrame:
     # Age is scaled later, inside each fold
     out["age_years"] = df["age_years"]
 
-    # event: 0 censored, 1 heart disease, 2 cancer, 3 other
+    # event: 0 censored, 1 heart disease or stroke, 2 cancer, 3 other
     died = df["mortality_status"] == 1
-    cause = df["cause_of_death"].map(lambda c: c if c in (1, 2) else 3)
+    cause = df["cause_of_death"].map(lambda c: 1 if c in (1, 5) else 2 if c == 2 else 3)
     died_in_window = died & (df["followup_months"] <= HORIZON_MONTHS)
     out["time"] = df["followup_months"].clip(upper=HORIZON_MONTHS)
     out["event"] = cause.where(died_in_window, 0).astype(int)
@@ -308,74 +292,10 @@ def recode(df: pd.DataFrame) -> pd.DataFrame:
         f"{(died & ~died_in_window).sum():,} deaths after that count as censored"
     )
     print(
-        "event: 0 censored, 1 heart disease, 2 cancer, 3 all other causes\n"
+        "event: 0 censored, 1 heart disease or stroke, 2 cancer, 3 all other causes\n"
         + out["event"].value_counts().sort_index().to_string()
     )
-    print("kept for later: participant_id, cycle (used to split by time)")
     return out
-
-
-# ----------------------------------------------------------------------------------------
-# Step 2: split the rows two ways
-# ----------------------------------------------------------------------------------------
-def stratified_kfold_splits(df: pd.DataFrame) -> list:
-    skf = StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=SEED)
-    return [(tr, te) for tr, te in skf.split(df, df["event"])]
-
-
-def time_series_splits(df: pd.DataFrame) -> list:
-    cycles = list(CYCLE_LABELS.values())
-    folds = []
-    start = TS_MIN_TRAIN_CYCLES
-    while start < len(cycles):
-        train = df["cycle"].isin(cycles[:start]).to_numpy()
-        test = df["cycle"].isin(cycles[start : start + TS_TEST_CYCLES]).to_numpy()
-        folds.append((np.flatnonzero(train), np.flatnonzero(test)))
-        start += TS_TEST_CYCLES
-    return folds
-
-
-# ----------------------------------------------------------------------------------------
-# Step 3: scale the age inside each fold, using its training rows only
-# ----------------------------------------------------------------------------------------
-def scale_and_save(df: pd.DataFrame, folds: list, name: str) -> None:
-    folder = SPLITS_DIR / name
-    folder.mkdir(parents=True, exist_ok=True)
-    print(f"\n--- {name}: {len(folds)} folds, saved in {folder} ---")
-
-    rows = []
-    for i, (tr, te) in enumerate(folds, start=1):
-        train, test = df.iloc[tr].copy(), df.iloc[te].copy()
-        assert not set(train["participant_id"]) & set(test["participant_id"])
-
-        mean, std = train["age_years"].mean(), train["age_years"].std()
-        for part in (train, test):
-            part["age_std"] = (part["age_years"] - mean) / std
-        train = train.drop(columns="age_years")
-        test = test.drop(columns="age_years")
-
-        train.to_csv(folder / f"fold_{i}_train.csv", index=False)
-        test.to_csv(folder / f"fold_{i}_test.csv", index=False)
-
-        row = {
-            "fold": i,
-            "n_train": len(train),
-            "n_test": len(test),
-            "age_mean": round(mean, 2),
-            "age_sd": round(std, 2),
-            "train_std_mean": round(train["age_std"].mean(), 3),
-            "train_std_sd": round(train["age_std"].std(), 3),
-            "test_std_mean": round(test["age_std"].mean(), 3),
-        }
-        for side, part in (("train", train), ("test", test)):
-            for e, label in ((1, "heart"), (2, "cancer"), (3, "other")):
-                row[f"{side}_{label}"] = int((part["event"] == e).sum())
-        if name == "time_series_cv":
-            order = list(CYCLE_LABELS.values())
-            row["train_cycles"] = f"{min(train['cycle'], key=order.index)} to {max(train['cycle'], key=order.index)}"
-            row["test_cycles"] = f"{min(test['cycle'], key=order.index)} to {max(test['cycle'], key=order.index)}"
-        rows.append(row)
-    print(pd.DataFrame(rows).to_string(index=False))
 
 
 # ----------------------------------------------------------------------------------------
@@ -491,15 +411,6 @@ def main() -> None:
     PREPROCESSED_FILE.parent.mkdir(parents=True, exist_ok=True)
     recoded.to_csv(PREPROCESSED_FILE, index=False)
     print(f"\nSaved {PREPROCESSED_FILE.resolve()}")
-
-    print("\n=== Step 2 and 3: split, then standardize the age inside each fold ===")
-    print(
-        "The age mean and standard deviation are computed on the training rows of each "
-        "fold only, so the test rows never influence the scaling."
-    )
-    scale_and_save(recoded, stratified_kfold_splits(recoded), "stratified_kfold")
-    scale_and_save(recoded, time_series_splits(recoded), "time_series_cv")
-    print(f"\nSaved the folds under {SPLITS_DIR.resolve()}")
 
 
 if __name__ == "__main__":

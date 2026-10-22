@@ -15,7 +15,7 @@ data. Share it with the group directly, not through a public repository.
 To get the raw files: register at
 <https://www.freddiemac.com/research/datasets/sf-loanlevel-dataset>, then from
 the SFLLD Data Download page take the **Sample File** column for each vintage
-year and put the archives in `data/raw/` **without renaming them**
+year and put the archives in `data/banking/0_raw/` **without renaming them**
 (`sample_2013.zip`, `sample_2014.zip`, ...).
 
 Each zip contains two pipe-delimited files with no header row:
@@ -191,10 +191,9 @@ inferred from them that Blumenstock used a stricter definition.
 1. It captures the large majority of what ever happens. Within the available
    follow-up, 72 months covers 87% of defaults and 86% of prepayments, against
    76% and 76% at 60 months. Going further hits diminishing returns.
-2. It fits inside the follow-up available in every cohort. The binding
-   constraints are the newest mortgage vintage (2018, 99 months observable) and
-   the newest survey cycle (2013-14, 85 months). 84 months would also fit but
-   leaves a one-month margin on the clinical side.
+2. It fits inside the follow-up available in the financial data: even the
+   newest mortgage vintage (2018) can be observed for 99 months. It does not
+   fully fit the medical data, see "Medical data" below.
 3. Blumenstock et al. (2022) evaluate at 24, 48 and 72 months on this dataset,
    so our horizons line up with the study whose conclusions we are testing.
    They do not justify the choice themselves -- reasons 1 and 2 are ours -- but
@@ -204,6 +203,32 @@ By default every loan is censored at **72 months**. A 2013 loan has been
 observed far longer than a 2018 one; without a common cut, `time` means a
 different thing for each vintage and any comparison across them is confounded by
 observation length alone. Pass `--max-follow-up 0` to keep full follow-up.
+
+### Medical data
+
+The medical data (NHANES, built by `src/prepare_medical_data.py`) is cut at the
+same 72 months, in `HORIZON_MONTHS`. All ten survey cycles (1999 to 2018) are kept.
+After cleaning there are 52,235 people.
+
+The cut moves 4,402 deaths after month 72 to censored. Within 72 months there are
+1,250 heart disease or stroke, 923 cancer and 1,720 other deaths. At 60 months there
+would be 1,049, 769 and 1,407, so 72 gives about 20% more events per cause.
+
+The cost is that the later cycles cannot be followed for 72 months. Share of people
+in each cycle who died or were followed for at least the horizon:
+
+| cycle | 60 months | 72 months |
+|---|---|---|
+| 1999 to 2012 | 100% | 100% |
+| 2013 to 2014 | 99% | 57% |
+| 2015 to 2016 | 6% | 5% |
+| 2017 to 2018 | 2% | 2% |
+
+So for 2013 to 2014, 43% of people are censored before month 72, and for 2015 to
+2018 nearly everyone is. The models handle this as censoring, but the last test
+folds rest more on the censoring estimate, and the 2017 to 2018 fold has only about
+30 heart disease and 30 cancer events. Read their 72 month metrics with care, and
+also look at shorter horizons (24 and 48 months).
 
 ## Known limitations
 
