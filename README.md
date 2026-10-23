@@ -54,16 +54,14 @@ The financial data is **two disjoint cohorts**, not one dataset. They share no
 loans and the same protocol is applied to each.
 
 ```bash
-# calm: ordinary drift
-~/venvs/rtds/bin/python src/0_prepare_financial_data.py \
-  --years 2013 2014 2015 2016 2017 2018 --max-rows 55000 \
-  --out data/banking/1_merged/financial_calm_2013_2018.csv
-
-# crisis: a structural break
-~/venvs/rtds/bin/python src/0_prepare_financial_data.py \
-  --years 2005 2006 2007 2008 2009 --max-rows 55000 \
-  --out data/banking/1_merged/financial_crisis_2005_2009.csv
+~/venvs/rtds/bin/python src/0_prepare_financial_data.py --cohort calm    # ordinary drift
+~/venvs/rtds/bin/python src/0_prepare_financial_data.py --cohort crisis  # a structural break
 ```
+
+`--cohort` is required and sets the origination years, the row cap and the
+output path together, since those three are what distinguish one cohort from
+the other rather than three independent settings. `--years`, `--max-rows` and
+`--out` still override it for a one-off check.
 
 | | calm 2013–2018 | crisis 2005–2009 |
 |---|---|---|
@@ -85,6 +83,46 @@ crisis one.
 
 The script prints a cleaning report and a per-column value summary before
 writing. Read them rather than trusting the file.
+
+## The pipeline
+
+Both domains run the same three numbered stages, and every stage writes to disk
+so the next one reads a file rather than repeating the work. Run them in order.
+
+```bash
+~/venvs/rtds/bin/python src/0_prepare_financial_data.py --cohort calm
+~/venvs/rtds/bin/python src/0_prepare_financial_data.py --cohort crisis
+~/venvs/rtds/bin/python src/0_prepare_medical_data.py
+~/venvs/rtds/bin/python src/1_make_folds.py               # all three datasets at once
+~/venvs/rtds/bin/python src/2_normalize_financial.py
+~/venvs/rtds/bin/python src/2_normalize_medical.py
+```
+
+| stage | financial | medical |
+|---|---|---|
+| 0 raw archives | `data/banking/0_raw/` | `data/medical/0_raw/` |
+| 0 prepared table | `data/banking/1_merged/` | `data/medical/1_merged/`, then `2_preprocessed/` |
+| 1 folds | `data/banking/2_folds/` | `data/medical/3_folds/` |
+| 2 per-fold train/test | `data/banking/3_normalized/{cohort}/{arm}/` | `data/medical/4_normalized/{arm}/` |
+
+Stage 1 builds the folds **once** and writes row positions, so every model sees
+identical splits and comparisons between models are paired. Stage 2 then
+materialises each fold as a `fold_N_train.csv` / `fold_N_test.csv` pair, with
+every statistic — the scaling, the imputation, the category lists — derived from
+the training rows of that fold alone. The model runner therefore reads a file
+and fits; nothing downstream can re-split or re-scale, which is the only way a
+leak can be ruled out rather than hoped for. The numbers used are kept in
+`scaling.json` next to the folds.
+
+The financial stage 2 does two things its medical counterpart does not need, for
+the same train-only reason: it fills missing `dti` with the training median
+(keeping `dti_missing` as the signal) and one-hot encodes the categorical
+covariates. Its header explains the three covariate decisions it encodes —
+`ltv` dropped for `cltv`, `state` coarsened to the nine Census divisions, and
+`default_zb_alt` excluded as an alternative coding of the outcome.
+
+Stage 2 writes about 160 MB of financial folds. Nothing under `data/` is
+tracked, so this stays local.
 
 ## Vendored model code (`vendor/`)
 

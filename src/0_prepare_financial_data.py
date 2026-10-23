@@ -26,23 +26,25 @@ INPUT
     instead of silently shifting every column.
 
 OUTPUT
-    data/banking/1_merged/financial_competing_risks.csv
+    One CSV per cohort, named in COHORTS below:
+        data/banking/1_merged/financial_calm_2013_2018.csv
+        data/banking/1_merged/financial_crisis_2005_2009.csv
 
 USAGE
-    python3 src/0_prepare_financial_data.py                      # settings in section 1
-    python3 src/0_prepare_financial_data.py --max-rows 100000
-    python3 src/0_prepare_financial_data.py --years 2016 2017 2018 --max-follow-up 0
+    python3 src/0_prepare_financial_data.py --cohort calm
+    python3 src/0_prepare_financial_data.py --cohort crisis
+
+    --cohort is required, and it sets the origination years, the row cap and the
+    output path together. The financial data is TWO DISJOINT COHORTS, not one
+    dataset. Anything else (--max-follow-up,
+    --seed, --drop-missing-dti) is shared by both and set in section 1.
+
+    --years, --max-rows and --out still exist and override the cohort, for a one-off
+    check. They have no defaults of their own: omit them and the cohort decides.
 
 FOUR DECISIONS:
 
-1. DEFAULT IS DEFINED AS 90+ DAYS PAST DUE, not as a disposition code.
-   The performance file reports a delinquency status every month. We take the
-   first month it reaches 3 (90 days past due) or "RA" (property repossessed).
-   The alternative is to wait for a Zero Balance Code recording the final
-   disposition, which arrives months or years later and only for some loans.
-   The 90-day definition is observed earlier and far more consistently.
-   `default_zb_alt` keeps the disposition-based version so the choice can be
-   tested rather than assumed.
+1. DEFAULT IS DEFINED AS 90+ DAYS PAST DUE,
 
    WHY 90 DAYS, GIVEN THAT THERE IS NO SINGLE STANDARD.
    Three reasons, in order of weight.
@@ -67,9 +69,6 @@ FOUR DECISIONS:
 
 
 2. FOLLOW-UP IS CUT AT A FIXED AGE (default 72 months).
-   A loan from 2013 has been observed for far longer than one from 2018. Without
-   a cut, "time" would mean something different for each vintage and any
-   comparison across vintages would be confounded by observation length alone.
    Cutting every loan at the same age makes them comparable: anything that had
    not happened by month 72 is recorded as censored at 72. This is ordinary
    administrative censoring. Pass --max-follow-up 0 to keep full follow-up.
@@ -80,8 +79,15 @@ FOUR DECISIONS:
    origination year stays represented. That matters if you later want to train
    on early years and test on later ones.
 
-4. MISSING VALUES ARE DROPPED OR FLAGGED, NEVER IMPUTED AND WHICH ONE
-   DEPENDS ON WHETHER THE MISSINGNESS IS RANDOM.
+4. THIS SCRIPT DROPS OR FLAGS MISSING VALUES AND NEVER IMPUTES THEM, AND WHICH
+   ONE DEPENDS ON WHETHER THE MISSINGNESS IS RANDOM.
+   Not out of principle: there is no correct place to impute here. This script
+   sees one cohort with no train/test boundary in it, so any median it computed
+   would run over rows that become TEST rows in every fold, and that value would
+   be baked into the training data for good. The folds do not exist until
+   1_make_folds.py, which makes 2_normalize_financial.py the earliest point where
+   a fill can be computed from training rows alone -- and that is where it
+   happens. See the note at the end of this item.
    FICO, LTV and the loan terms are missing for well under 1% of loans with no
    pattern, so those rows are dropped. DTI is different: Freddie Mac did not
    report it consistently in the early years, and it is missing for 28.8% of
@@ -90,11 +96,18 @@ FOUR DECISIONS:
    train-early / test-later comparison with the cleaning itself. So the row is
    kept, `dti` is left empty, and `dti_missing` records it.
 
-   IF YOUR MODEL CANNOT TAKE AN EMPTY VALUE, impute DTI from the TRAINING fold
-   only, never from the whole file. Imputing from the whole file uses test-set
-   information to build the training data, which leaks and inflates results.
-   Keep `dti_missing` as a feature either way: whether a lender recorded DTI is
-   itself informative.
+   WHERE THE EMPTY VALUES ARE FILLED. 2_normalize_financial.py fills them per
+   fold with the median of that fold's TRAINING rows, and keeps `dti_missing` as
+   a feature, since whether a lender recorded DTI is itself informative. The
+   medians it used are recorded in data/banking/3_normalized/<cohort>/scaling.json,
+   one per fold per arm. Do not fill anything from the whole file: that uses
+   test-set information to build the training data, which leaks and inflates
+   results.
+
+   The optional covariates behave the same way. `cltv` is empty on 9 calm loans
+   and `n_borrowers` on 19 crisis loans; those are kept here and filled by the
+   same per-fold median, with no indicator column, because a flag set on 9 rows
+   out of 55,000 would be constant within some training folds and carries nothing.
 
 Every step prints what it removed and why.
 """
@@ -112,10 +125,24 @@ import pandas as pd
 # 1. Folders and settings (edit these; the command line options below override them)
 # ----------------------------------------------------------------------------------------
 RAW_DIR = Path("data/banking/0_raw")  # holds sample_YYYY.zip, not renamed
-OUTPUT_FILE = Path("data/banking/1_merged/financial_competing_risks.csv")
 
-YEARS = [2013, 2014, 2015, 2016, 2017, 2018]  # origination years to include
-MAX_ROWS = 50_000  # row cap, sampled evenly across years; 0 keeps everything
+# The two cohorts. Each one fixes its origination years, its row cap and its output
+# path together, because they are not independent choices: they are what distinguishes
+# one cohort from the other. --cohort picks a row of this table and nothing else.
+COHORTS = {
+    "calm": {
+        "years": [2013, 2014, 2015, 2016, 2017, 2018],
+        "max_rows": 55_000,
+        "out": Path("data/banking/1_merged/financial_calm_2013_2018.csv"),
+    },
+    "crisis": {
+        "years": [2005, 2006, 2007, 2008, 2009],
+        "max_rows": 55_000,
+        "out": Path("data/banking/1_merged/financial_crisis_2005_2009.csv"),
+    },
+}
+
+# Shared by both cohorts; the same protocol is applied to each
 MAX_FOLLOW_UP = 72  # censor every loan at this age in months; 0 keeps full follow-up
 SEED = 0  # random seed for the subsample, so the CSV is reproducible
 DROP_MISSING_DTI = False  # True drops loans with no DTI instead of flagging them
@@ -712,17 +739,23 @@ def main() -> None:
         description="Build the financial competing-risks CSV from Freddie Mac data."
     )
     ap.add_argument(
+        "--cohort",
+        choices=sorted(COHORTS),
+        required=True,
+        help="which cohort to build; sets the years, the row cap and the output path",
+    )
+    ap.add_argument(
         "--years",
         type=int,
         nargs="+",
-        default=YEARS,
-        help="origination years to include (needs sample_YYYY.zip in RAW_DIR)",
+        help="override the cohort's origination years "
+        "(needs sample_YYYY.zip in RAW_DIR)",
     )
     ap.add_argument(
         "--max-rows",
         type=int,
-        default=MAX_ROWS,
-        help="row cap; 0 keeps everything. Sampled evenly across years.",
+        help="override the cohort's row cap; 0 keeps everything. "
+        "Sampled evenly across years.",
     )
     ap.add_argument(
         "--max-follow-up",
@@ -749,9 +782,21 @@ def main() -> None:
         "early vintages than the late ones -- read the note on "
         "REQUIRED before using it.",
     )
-    ap.add_argument("--out", type=Path, default=OUTPUT_FILE, help="output CSV file")
+    ap.add_argument(
+        "--out", type=Path, help="override the cohort's output CSV file"
+    )
     args = ap.parse_args()
 
+    # The cohort supplies anything not overridden on the command line
+    cohort = COHORTS[args.cohort]
+    if args.years is None:
+        args.years = cohort["years"]
+    if args.max_rows is None:
+        args.max_rows = cohort["max_rows"]
+    if args.out is None:
+        args.out = cohort["out"]
+
+    print(f"cohort        {args.cohort}")
     print(f"years         {args.years}")
     print(
         f"max rows      {args.max_rows:,}" if args.max_rows else "max rows      (all)"
@@ -761,7 +806,8 @@ def main() -> None:
         if args.max_follow_up
         else "follow-up     (full)"
     )
-    print(f"seed          {args.seed}\n")
+    print(f"seed          {args.seed}")
+    print(f"output        {args.out}\n")
 
     parts = []
     for year in args.years:

@@ -80,24 +80,26 @@ not be mistaken for a bug.
 ## Build
 
 ```bash
-# calm
-python3 src/0_prepare_financial_data.py --years 2013 2014 2015 2016 2017 2018 \
-  --max-rows 55000 --out data/banking/1_merged/financial_calm_2013_2018.csv
-
-# crisis
-python3 src/0_prepare_financial_data.py --years 2005 2006 2007 2008 2009 \
-  --max-rows 55000 --out data/banking/1_merged/financial_crisis_2005_2009.csv
+python3 src/0_prepare_financial_data.py --cohort calm
+python3 src/0_prepare_financial_data.py --cohort crisis
 ```
 
-Both use a 72-month window and seed 0, and draw an equal number of loans from
-each origination year so no vintage dominates.
+`--cohort` is required. It sets the origination years, the row cap and the output
+path from the `COHORTS` table in the script, because those three together are what
+makes a cohort rather than three settings that happen to be passed at the same
+time. Both cohorts use 55,000 loans, a 72-month window and seed 0, and draw an
+equal number of loans from each origination year so no vintage dominates.
 
 ```bash
-# other sizes / windows
-python3 src/0_prepare_financial_data.py --max-rows 250000
-python3 src/0_prepare_financial_data.py --years 2016 2017 2018 --max-follow-up 36
-python3 src/0_prepare_financial_data.py --max-rows 0 --max-follow-up 0   # everything
+# other sizes / windows: the cohort still supplies whatever is not overridden
+python3 src/0_prepare_financial_data.py --cohort calm --max-rows 250000
+python3 src/0_prepare_financial_data.py --cohort calm --years 2016 2017 2018 \
+  --max-follow-up 36 --out /tmp/check.csv
+python3 src/0_prepare_financial_data.py --cohort calm --max-rows 0 \
+  --max-follow-up 0 --out /tmp/everything.csv   # everything
 ```
+
+Give an override run its own `--out`, or it writes over the cohort's file.
 
 The script prints a cleaning report and a per-column value summary before it
 writes. Read them. They are the audit trail for the file you hand to the group,
