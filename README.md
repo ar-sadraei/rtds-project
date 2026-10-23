@@ -55,12 +55,12 @@ loans and the same protocol is applied to each.
 
 ```bash
 # calm: ordinary drift
-~/venvs/rtds/bin/python src/prepare_financial_data.py \
+~/venvs/rtds/bin/python src/0_prepare_financial_data.py \
   --years 2013 2014 2015 2016 2017 2018 --max-rows 55000 \
   --out data/banking/1_merged/financial_calm_2013_2018.csv
 
 # crisis: a structural break
-~/venvs/rtds/bin/python src/prepare_financial_data.py \
+~/venvs/rtds/bin/python src/0_prepare_financial_data.py \
   --years 2005 2006 2007 2008 2009 --max-rows 55000 \
   --out data/banking/1_merged/financial_crisis_2005_2009.csv
 ```

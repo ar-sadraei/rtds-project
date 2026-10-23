@@ -8,7 +8,7 @@ or "don't know" smoking answer.
 Then the columns are recoded and the time and event labels are built (follow-up cut at
 HORIZON_MONTHS). The age is not scaled here, it is scaled inside each fold.
 
-Edit the folders and column lists below, then run:  python src/prepare_medical_data.py
+Edit the folders and column lists below, then run:  python src/0_prepare_medical_data.py
 File names do not matter. Every .xpt (or .xpt.txt) file in a survey folder and every
 .dat file in the mortality folder is read, and the cycle comes from the data itself.
 """
@@ -404,6 +404,7 @@ def main() -> None:
 
     show_preview(df)
 
+    MERGED_FILE.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(MERGED_FILE, index=False)
     print(f"\nSaved {MERGED_FILE.resolve()}")
 

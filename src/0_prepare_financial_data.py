@@ -29,9 +29,9 @@ OUTPUT
     data/banking/1_merged/financial_competing_risks.csv
 
 USAGE
-    python3 src/prepare_financial_data.py                      # settings in section 1
-    python3 src/prepare_financial_data.py --max-rows 100000
-    python3 src/prepare_financial_data.py --years 2016 2017 2018 --max-follow-up 0
+    python3 src/0_prepare_financial_data.py                      # settings in section 1
+    python3 src/0_prepare_financial_data.py --max-rows 100000
+    python3 src/0_prepare_financial_data.py --years 2016 2017 2018 --max-follow-up 0
 
 FOUR DECISIONS:
 
@@ -612,7 +612,7 @@ def describe(df: pd.DataFrame) -> None:
         .to_string()
     )
 
-    # Coded columns, printed the way prepare_medical_data.py prints its
+    # Coded columns, printed the way 0_prepare_medical_data.py prints its
     # VALUE_LABELS: every level a column actually takes, with its count. This is
     # what you scan to catch a sentinel that slipped through or a category that
     # appears in one vintage and not another.
