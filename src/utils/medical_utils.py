@@ -1,38 +1,12 @@
-#!/usr/bin/env python3
 """
-Merge NHANES demography, smoking and linked mortality (2019) files into one table
-and print a preview. These people are removed: under MIN_AGE_YEARS, without a mortality
-status, without a smoked_100_cigarettes answer, smokers without a smokes_now answer, and
-people who died without a cause of death, without a follow-up time, and with a refused
-or "don't know" smoking answer.
-Then the columns are recoded and the time and event labels are built (follow-up cut at
-HORIZON_MONTHS). The age is not scaled here, it is scaled inside each fold.
-
-Edit the folders and column lists below, then run:  python src/0_prepare_medical_data.py
-File names do not matter. Every .xpt (or .xpt.txt) file in a survey folder and every
-.dat file in the mortality folder is read, and the cycle comes from the data itself.
+Functions for the medical data (NHANES demography, smoking and linked mortality).
 """
 
+import json
 import sys
 from pathlib import Path
 
 import pandas as pd
-
-# ----------------------------------------------------------------------------------------
-# 1. Folders (edit these)
-# ----------------------------------------------------------------------------------------
-DEMOGRAPHY_DIR = Path("data/medical/0_raw/demography")
-SMOKING_DIR = Path("data/medical/0_raw/smoking")
-MORTALITY_DIR = Path("data/medical/0_raw/mortality")
-MERGED_FILE = Path("data/medical/1_merged/nhanes_merged.csv")
-# Recoded, age not scaled yet
-PREPROCESSED_FILE = Path("data/medical/2_preprocessed/nhanes_preprocessed.csv")
-
-# Mortality is only linked for adults
-MIN_AGE_YEARS = 20
-
-# Cut follow-up at this many months
-HORIZON_MONTHS = 72
 
 # ----------------------------------------------------------------------------------------
 # 2. Columns to keep: original name -> new name. Everything else is dropped.
@@ -115,6 +89,9 @@ VALUE_LABELS = {
         9: "don't know",
     },
 }
+
+
+# ----------------------------------------------------------------------------------------
 
 
 # ----------------------------------------------------------------------------------------
@@ -204,108 +181,20 @@ def whole_numbers_as_int(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ----------------------------------------------------------------------------------------
-# Preview
-# ----------------------------------------------------------------------------------------
-def show_preview(df: pd.DataFrame) -> None:
-    pd.set_option("display.max_columns", None)
-    pd.set_option("display.width", 200)
-
-    print("\n=== Columns and value types ===")
-    print(df.dtypes.to_string())
-
-    print("\n=== 5 random rows ===")
-    print(df.sample(5))
-
-    print(f"\n=== Total entries: {len(df):,} ===")
-
-    print("\n=== Entries per cycle ===")
-    print(df["cycle"].value_counts().sort_index().to_string())
-
-    print("\n=== Missing values per column ===")
-    missing = df.isna().sum()
-    print(
-        pd.DataFrame(
-            {"missing": missing, "missing_%": (missing / len(df) * 100).round(1)}
-        ).to_string()
-    )
-
-    print("\n=== Values of the coded columns ===")
-    for col, labels in VALUE_LABELS.items():
-        counts = df[col].value_counts().sort_index()
-        print(f"\n{col}")
-        for code, n in zip(counts.index.to_list(), counts.to_list()):
-            label = labels.get(code, "??? not in VALUE_LABELS")
-            print(f"  {code:>3}  {label:<36} {n:>7,}")
 
 
 # ----------------------------------------------------------------------------------------
-# Recoding
+# Merging and cleaning
 # ----------------------------------------------------------------------------------------
-def recode(df: pd.DataFrame) -> pd.DataFrame:
-    print("\n=== Recoding ===")
-    out = df[["participant_id", "cycle"]].copy()
-
-    out["sex_female"] = (df["sex"] == 2).astype(int)
-    print(
-        f"sex: 1 male / 2 female -> sex_female 0/1 ({out['sex_female'].sum():,} female)"
-    )
-
-    # White is the reference group
-    race_columns = {
-        1: "race_mexican_american",
-        2: "race_other_hispanic",
-        4: "race_black",
-        5: "race_other",
-    }
-    for code, name in race_columns.items():
-        out[name] = (df["race_ethnicity"] == code).astype(int)
-    print(
-        "race_ethnicity: one-hot into "
-        f"{', '.join(race_columns.values())} (reference: non-Hispanic white)"
-    )
-
-    # One smoking status; never-smokers are not asked the second question
-    status = pd.Series("never", index=df.index)
-    ever = df["smoked_100_cigarettes"] == 1
-    status[ever & (df["smokes_now"] == 3)] = "former"
-    status[ever & (df["smokes_now"] == 2)] = "current_some_days"
-    status[ever & (df["smokes_now"] == 1)] = "current_every_day"
-    for name in ["former", "current_some_days", "current_every_day"]:
-        out[f"smoking_{name}"] = (status == name).astype(int)
-    print(
-        "smoked_100_cigarettes + smokes_now: combined into a smoking status, then one-hot "
-        "(reference: never)"
-    )
-    print(status.value_counts().to_string())
-
-    # Age is scaled later, inside each fold
-    out["age_years"] = df["age_years"]
-
-    # event: 0 censored, 1 heart disease or stroke, 2 cancer, 3 other
-    died = df["mortality_status"] == 1
-    cause = df["cause_of_death"].map(lambda c: 1 if c in (1, 5) else 2 if c == 2 else 3)
-    died_in_window = died & (df["followup_months"] <= HORIZON_MONTHS)
-    out["time"] = df["followup_months"].clip(upper=HORIZON_MONTHS)
-    out["event"] = cause.where(died_in_window, 0).astype(int)
-    print(
-        f"time and event: follow-up cut at {HORIZON_MONTHS} months; "
-        f"{(died & ~died_in_window).sum():,} deaths after that count as censored"
-    )
-    print(
-        "event: 0 censored, 1 heart disease or stroke, 2 cancer, 3 all other causes\n"
-        + out["event"].value_counts().sort_index().to_string()
-    )
-    return out
-
-
-# ----------------------------------------------------------------------------------------
-def main() -> None:
+def merge_and_clean(
+    demography_dir: Path, smoking_dir: Path, mortality_dir: Path, min_age_years: int
+) -> pd.DataFrame:
     print("Reading demography files")
-    demo = read_survey_folder(DEMOGRAPHY_DIR, DEMOGRAPHY_COLUMNS)
+    demo = read_survey_folder(demography_dir, DEMOGRAPHY_COLUMNS)
     print("Reading smoking files")
-    smoke = read_survey_folder(SMOKING_DIR, SMOKING_COLUMNS)
+    smoke = read_survey_folder(smoking_dir, SMOKING_COLUMNS)
     print("Reading mortality files")
-    mort = read_mortality_folder(MORTALITY_DIR)
+    mort = read_mortality_folder(mortality_dir)
 
     # Demography is the base table
     df = demo.merge(mort, on="participant_id", how="left", validate="one_to_one")
@@ -333,9 +222,9 @@ def main() -> None:
     ]
 
     n_before = len(df)
-    df = df[df["age_years"] >= MIN_AGE_YEARS].reset_index(drop=True)
+    df = df[df["age_years"] >= min_age_years].reset_index(drop=True)
     print(
-        f"Removed {n_before - len(df):,} participants under {MIN_AGE_YEARS}, "
+        f"Removed {n_before - len(df):,} participants under {min_age_years}, "
         f"{len(df):,} left."
     )
 
@@ -401,18 +290,213 @@ def main() -> None:
     if empty:
         print(f"Dropping columns with no data at all: {empty}")
         df = df.drop(columns=empty)
-
-    show_preview(df)
-
-    MERGED_FILE.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(MERGED_FILE, index=False)
-    print(f"\nSaved {MERGED_FILE.resolve()}")
-
-    recoded = recode(df)
-    PREPROCESSED_FILE.parent.mkdir(parents=True, exist_ok=True)
-    recoded.to_csv(PREPROCESSED_FILE, index=False)
-    print(f"\nSaved {PREPROCESSED_FILE.resolve()}")
+    return df
 
 
-if __name__ == "__main__":
-    main()
+# ----------------------------------------------------------------------------------------
+# Preview
+# ----------------------------------------------------------------------------------------
+def show_preview(df: pd.DataFrame) -> None:
+    pd.set_option("display.max_columns", None)
+    pd.set_option("display.width", 200)
+
+    print("\n=== Columns and value types ===")
+    print(df.dtypes.to_string())
+
+    print("\n=== 5 random rows ===")
+    print(df.sample(5))
+
+    print(f"\n=== Total entries: {len(df):,} ===")
+
+    print("\n=== Entries per cycle ===")
+    print(df["cycle"].value_counts().sort_index().to_string())
+
+    print("\n=== Missing values per column ===")
+    missing = df.isna().sum()
+    print(
+        pd.DataFrame(
+            {"missing": missing, "missing_%": (missing / len(df) * 100).round(1)}
+        ).to_string()
+    )
+
+    print("\n=== Values of the coded columns ===")
+    for col, labels in VALUE_LABELS.items():
+        counts = df[col].value_counts().sort_index()
+        print(f"\n{col}")
+        for code, n in zip(counts.index.to_list(), counts.to_list()):
+            label = labels.get(code, "??? not in VALUE_LABELS")
+            print(f"  {code:>3}  {label:<36} {n:>7,}")
+
+
+# ----------------------------------------------------------------------------------------
+
+
+# ----------------------------------------------------------------------------------------
+# Recoding
+# ----------------------------------------------------------------------------------------
+def add_labels(df: pd.DataFrame, horizon_months: int) -> pd.DataFrame:
+    """Add the time and event columns, with follow-up cut at the horizon."""
+    out = df.copy()
+
+    # event: 0 censored, 1 heart disease, 2 cancer, 3 other
+    died = df["mortality_status"] == 1
+    cause = df["cause_of_death"].map(lambda c: 1 if c == 1 else 2 if c == 2 else 3)
+    died_in_window = died & (df["followup_months"] <= horizon_months)
+    out["time"] = df["followup_months"].clip(upper=horizon_months)
+    out["event"] = cause.where(died_in_window, 0).astype(int)
+    print(
+        f"time and event: follow-up cut at {horizon_months} months; "
+        f"{(died & ~died_in_window).sum():,} deaths after that count as censored"
+    )
+    print(
+        "event: 0 censored, 1 heart disease, 2 cancer, 3 all other causes\n"
+        + out["event"].value_counts().sort_index().to_string()
+    )
+    return out
+
+
+def recode(df: pd.DataFrame) -> pd.DataFrame:
+    """Recode the columns for the models. Fixed rules only, nothing is learned."""
+    print("\n=== Recoding ===")
+    out = df[["participant_id", "cycle"]].copy()
+
+    out["sex_female"] = (df["sex"] == 2).astype(int)
+    print(
+        f"sex: 1 male / 2 female -> sex_female 0/1 ({out['sex_female'].sum():,} female)"
+    )
+
+    # White is the reference group
+    race_columns = {
+        1: "race_mexican_american",
+        2: "race_other_hispanic",
+        4: "race_black",
+        5: "race_other",
+    }
+    for code, name in race_columns.items():
+        out[name] = (df["race_ethnicity"] == code).astype(int)
+    print(
+        "race_ethnicity: one-hot into "
+        f"{', '.join(race_columns.values())} (reference: non-Hispanic white)"
+    )
+
+    # One smoking status; never-smokers are not asked the second question
+    status = pd.Series("never", index=df.index)
+    ever = df["smoked_100_cigarettes"] == 1
+    status[ever & (df["smokes_now"] == 3)] = "former"
+    status[ever & (df["smokes_now"] == 2)] = "current_some_days"
+    status[ever & (df["smokes_now"] == 1)] = "current_every_day"
+    for name in ["former", "current_some_days", "current_every_day"]:
+        out[f"smoking_{name}"] = (status == name).astype(int)
+    print(
+        "smoked_100_cigarettes + smokes_now: combined into a smoking status, then one-hot "
+        "(reference: never)"
+    )
+    print(status.value_counts().to_string())
+
+    # Age is scaled later, inside each fold
+    out["age_years"] = df["age_years"]
+
+    out["time"] = df["time"]
+    out["event"] = df["event"]
+    return out
+
+
+# ----------------------------------------------------------------------------------------
+# Normalizing
+# ----------------------------------------------------------------------------------------
+# Continuous columns to standardize; the 0/1 columns are left as they are
+COLUMNS_TO_SCALE = ["age_years"]
+
+# Name of the scaled column
+SCALED_NAMES = {"age_years": "age_std"}
+
+# Same sort as the folds, so the saved row positions point at the same people
+GROUP_COLUMN = "cycle"
+ID_COLUMN = "participant_id"
+
+
+# ----------------------------------------------------------------------------------------
+# Reading
+# ----------------------------------------------------------------------------------------
+def read_inputs(table_file: Path, folds_file: Path) -> tuple:
+    for path in (table_file, folds_file):
+        if not path.exists():
+            sys.exit(f"File not found: {path.resolve()}")
+
+    df = pd.read_csv(table_file)
+    df = df.sort_values([GROUP_COLUMN, ID_COLUMN]).reset_index(drop=True)
+    spec = json.loads(folds_file.read_text())
+    print(f"Read {len(df):,} rows from {table_file}")
+    print(f"Read folds from {folds_file}")
+
+    # The folds are row positions, so they only fit the table they were made from
+    if len(df) != spec["n"]:
+        sys.exit(
+            f"The folds were made for {spec['n']:,} rows but the table has {len(df):,}. "
+            "Run the folds step again."
+        )
+    return df, spec
+
+
+# ----------------------------------------------------------------------------------------
+# Scaling
+# ----------------------------------------------------------------------------------------
+def normalize_fold(df: pd.DataFrame, train_idx: list, test_idx: list) -> tuple:
+    train, test = df.iloc[train_idx].copy(), df.iloc[test_idx].copy()
+    assert not set(train[ID_COLUMN]) & set(test[ID_COLUMN])
+
+    params = {}
+    for col in COLUMNS_TO_SCALE:
+        mean, sd = train[col].mean(), train[col].std()
+        params[col] = {"mean": float(mean), "sd": float(sd)}
+        for part in (train, test):
+            part[col] = ((part[col] - mean) / sd).astype("float64")
+
+    rename = {c: SCALED_NAMES[c] for c in COLUMNS_TO_SCALE}
+    return train.rename(columns=rename), test.rename(columns=rename), params
+
+
+def normalize_arm(df: pd.DataFrame, folds: list, arm: str, output_dir: Path) -> list:
+    folder = output_dir / arm
+    folder.mkdir(parents=True, exist_ok=True)
+    print(f"\n--- {arm}: {len(folds)} folds, saved in {folder} ---")
+
+    summary, all_params = [], []
+    for i, fold in enumerate(folds, start=1):
+        train, test, params = normalize_fold(df, fold["train"], fold["test"])
+        train.to_csv(folder / f"fold_{i}_train.csv", index=False)
+        test.to_csv(folder / f"fold_{i}_test.csv", index=False)
+        all_params.append({"fold": i, **params})
+
+        row = {"fold": i, "n_train": len(train), "n_test": len(test)}
+        for col in COLUMNS_TO_SCALE:
+            new = SCALED_NAMES[col]
+            row[f"{col}_mean"] = round(params[col]["mean"], 2)
+            row[f"{col}_sd"] = round(params[col]["sd"], 2)
+            row[f"train_{new}_mean"] = round(train[new].mean(), 3)
+            row[f"train_{new}_sd"] = round(train[new].std(), 3)
+            row[f"test_{new}_mean"] = round(test[new].mean(), 3)
+        summary.append(row)
+    print(pd.DataFrame(summary).to_string(index=False))
+    return all_params
+
+
+# ----------------------------------------------------------------------------------------
+
+
+def normalize(table_file: Path, folds_file: Path, output_dir: Path) -> None:
+    """Recode the table, scale each fold with its own training rows and save it."""
+    df, spec = read_inputs(table_file, folds_file)
+    df = recode(df)
+
+    print(f"\nScaling {COLUMNS_TO_SCALE} with the mean and standard deviation of the")
+    print("training rows of each fold only, then applying them to its test rows.")
+
+    params = {}
+    for arm in ("temporal", "random"):
+        params[arm] = normalize_arm(df, spec[arm], arm, output_dir)
+
+    # Keep the numbers used, so the same scaling can be applied again later
+    params_file = output_dir / "scaling.json"
+    params_file.write_text(json.dumps(params, indent=1))
+    print(f"\nSaved {params_file.resolve()}")

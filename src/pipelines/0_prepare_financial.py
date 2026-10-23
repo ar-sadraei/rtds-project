@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+"""
+Prepare the financial data (Freddie Mac single-family mortgages), both cohorts.
+
+For each cohort (calm and crisis) it runs three steps in order, each one printing what
+it does:
+  1. prepare: read the raw archives, clean them and save one CSV,
+  2. folds: build the temporal and random folds and check them for leaks,
+  3. normalize: impute, scale and encode inside each fold, training rows only.
+
+The reasons behind the choices (default definition, 72-month cut, missing values) are
+in README.md under Notes.
+
+Edit the folders and settings below, then run from the project folder:
+    venv/bin/python src/pipelines/0_prepare_financial.py
+"""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from utils import financial_utils, fold_utils
+
+# ----------------------------------------------------------------------------------------
+# 1. Folders and settings (edit these)
+# ----------------------------------------------------------------------------------------
+# Raw archives, named sample_YYYY.zip
+RAW_DIR = Path("data/financial/0_raw")
+NORMALIZED_DIR = Path("data/financial/3_normalized")
+
+# The two cohorts share no loans and get the same protocol
+COHORTS = {
+    "calm": {
+        "years": [2013, 2014, 2015, 2016, 2017, 2018],
+        "max_rows": 55_000,
+        "table": Path("data/financial/1_merged/financial_calm_2013_2018.csv"),
+        "folds": Path("data/financial/2_folds/financial-calm.json"),
+    },
+    "crisis": {
+        "years": [2005, 2006, 2007, 2008, 2009],
+        "max_rows": 55_000,
+        "table": Path("data/financial/1_merged/financial_crisis_2005_2009.csv"),
+        "folds": Path("data/financial/2_folds/financial-crisis.json"),
+    },
+}
+
+# Censor every loan at this age in months; 0 keeps full follow-up
+MAX_FOLLOW_UP = 72
+
+# True drops loans with no DTI instead of flagging them
+DROP_MISSING_DTI = False
+
+# Seed for the subsample and the folds
+SEED = 0
+
+
+def main() -> None:
+    for cohort, cfg in COHORTS.items():
+        print("=" * 92)
+        print(f"{cohort.upper()} COHORT")
+        print("=" * 92)
+
+        print("\n=== Step 1: prepare ===")
+        financial_utils.prepare_cohort(
+            cohort,
+            RAW_DIR,
+            cfg["years"],
+            cfg["max_rows"],
+            MAX_FOLLOW_UP,
+            SEED,
+            DROP_MISSING_DTI,
+            cfg["table"],
+        )
+
+        print("\n=== Step 2: folds ===")
+        fold_utils.make_folds(
+            cfg["table"],
+            financial_utils.GROUP_COLUMN,
+            financial_utils.ID_COLUMN,
+            "event",
+            f"financial-{cohort}",
+            cfg["folds"],
+            SEED,
+        )
+
+        print("\n=== Step 3: normalize inside each fold ===")
+        financial_utils.normalize_cohort(
+            cohort, cfg["table"], cfg["folds"], NORMALIZED_DIR
+        )
+
+
+if __name__ == "__main__":
+    main()

@@ -1,151 +1,17 @@
 """
-Prepare the financial competing-risks dataset (Freddie Mac mortgages) as a CSV.
-
-WHAT THIS PRODUCES
-    One row per loan. Three mutually exclusive outcomes, which is what makes this
-    a competing-risks dataset rather than an ordinary survival one:
-
-        event = 0   censored   still performing when we stop looking
-        event = 1   default    borrower stopped paying
-        event = 2   prepaid    loan paid off early (refinance, sale)
-
-        time        loan age in MONTHS when that happened
-
-    Once a loan defaults it can never prepay, and vice versa. That is the
-    competing-risks structure.
-
-INPUT
-    data/banking/0_raw/sample_YYYY.zip -- the Freddie Mac Single-Family Loan-Level Dataset
-    sample files. Each zip holds two pipe-delimited files with no header row:
-        sample_orig_YYYY.txt   one row per loan   (31 fields)
-        sample_perf_YYYY.txt   one row per loan per month (35 fields, ~475 MB)
-
-    Field positions are from the official layout, "File Layout (effective July 2026)":
-    https://www.freddiemac.com/fmac-resources/research/pdf/file_layout_july_2026.xlsx
-    The field counts are asserted at parse time so a layout change fails loudly
-    instead of silently shifting every column.
-
-OUTPUT
-    One CSV per cohort, named in COHORTS below:
-        data/banking/1_merged/financial_calm_2013_2018.csv
-        data/banking/1_merged/financial_crisis_2005_2009.csv
-
-USAGE
-    python3 src/0_prepare_financial_data.py --cohort calm
-    python3 src/0_prepare_financial_data.py --cohort crisis
-
-    --cohort is required, and it sets the origination years, the row cap and the
-    output path together. The financial data is TWO DISJOINT COHORTS, not one
-    dataset. Anything else (--max-follow-up,
-    --seed, --drop-missing-dti) is shared by both and set in section 1.
-
-    --years, --max-rows and --out still exist and override the cohort, for a one-off
-    check. They have no defaults of their own: omit them and the cohort decides.
-
-FOUR DECISIONS:
-
-1. DEFAULT IS DEFINED AS 90+ DAYS PAST DUE,
-
-   WHY 90 DAYS, GIVEN THAT THERE IS NO SINGLE STANDARD.
-   Three reasons, in order of weight.
-
-   It is the data owner's own convention for this exact product: FHFA and
-   Freddie Mac report "seriously delinquent" loans as those 90 or more days
-   past due or in foreclosure, which is the headline credit metric in their
-   monthly volume summaries.
-
-   It is what Blumenstock et al. (2022) use on this dataset -- "Default is
-   defined as a loan turning into 3-month delinquency for the first time"
-   (section 3.1) -- so our event definition matches the study whose
-   conclusions we are testing.
-
-   It also matches the general Basel/CRR reference definition of default.
-
-   Not the US capital rule, which puts a residential mortgage in default at
-   180 days (12 CFR 3.101), and not Peng and Lessmann (2026, arXiv:2601.20533),
-   who count any delinquency on these same sample files and call that "an
-   early-delinquency definition". The threshold moves the event rate by an
-   order of magnitude, so it is stated rather than assumed.
-
-
-2. FOLLOW-UP IS CUT AT A FIXED AGE (default 72 months).
-   Cutting every loan at the same age makes them comparable: anything that had
-   not happened by month 72 is recorded as censored at 72. This is ordinary
-   administrative censoring. Pass --max-follow-up 0 to keep full follow-up.
-
-3. SUBSAMPLING IS STRATIFIED BY ORIGINATION YEAR.
-   Taking a simple random sample of the whole pool would let one vintage
-   dominate by chance. We take an equal share from each year, so every
-   origination year stays represented. That matters if you later want to train
-   on early years and test on later ones.
-
-4. THIS SCRIPT DROPS OR FLAGS MISSING VALUES AND NEVER IMPUTES THEM, AND WHICH
-   ONE DEPENDS ON WHETHER THE MISSINGNESS IS RANDOM.
-   Not out of principle: there is no correct place to impute here. This script
-   sees one cohort with no train/test boundary in it, so any median it computed
-   would run over rows that become TEST rows in every fold, and that value would
-   be baked into the training data for good. The folds do not exist until
-   1_make_folds.py, which makes 2_normalize_financial.py the earliest point where
-   a fill can be computed from training rows alone -- and that is where it
-   happens. See the note at the end of this item.
-   FICO, LTV and the loan terms are missing for well under 1% of loans with no
-   pattern, so those rows are dropped. DTI is different: Freddie Mac did not
-   report it consistently in the early years, and it is missing for 28.8% of
-   2013 loans against 1.0% of 2018 loans. Dropping those would quietly filter
-   the early vintages harder than the late ones -- which would confound a
-   train-early / test-later comparison with the cleaning itself. So the row is
-   kept, `dti` is left empty, and `dti_missing` records it.
-
-   WHERE THE EMPTY VALUES ARE FILLED. 2_normalize_financial.py fills them per
-   fold with the median of that fold's TRAINING rows, and keeps `dti_missing` as
-   a feature, since whether a lender recorded DTI is itself informative. The
-   medians it used are recorded in data/banking/3_normalized/<cohort>/scaling.json,
-   one per fold per arm. Do not fill anything from the whole file: that uses
-   test-set information to build the training data, which leaks and inflates
-   results.
-
-   The optional covariates behave the same way. `cltv` is empty on 9 calm loans
-   and `n_borrowers` on 19 crisis loans; those are kept here and filled by the
-   same per-fold median, with no indicator column, because a flag set on 9 rows
-   out of 55,000 would be constant within some training folds and carries nothing.
-
-Every step prints what it removed and why.
+Functions for the financial data (Freddie Mac single-family loans).
 """
 
 from __future__ import annotations
 
-import argparse
 import io
+import json
+import sys
 import zipfile
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
-
-# ----------------------------------------------------------------------------------------
-# 1. Folders and settings (edit these; the command line options below override them)
-# ----------------------------------------------------------------------------------------
-RAW_DIR = Path("data/banking/0_raw")  # holds sample_YYYY.zip, not renamed
-
-# The two cohorts. Each one fixes its origination years, its row cap and its output
-# path together, because they are not independent choices: they are what distinguishes
-# one cohort from the other. --cohort picks a row of this table and nothing else.
-COHORTS = {
-    "calm": {
-        "years": [2013, 2014, 2015, 2016, 2017, 2018],
-        "max_rows": 55_000,
-        "out": Path("data/banking/1_merged/financial_calm_2013_2018.csv"),
-    },
-    "crisis": {
-        "years": [2005, 2006, 2007, 2008, 2009],
-        "max_rows": 55_000,
-        "out": Path("data/banking/1_merged/financial_crisis_2005_2009.csv"),
-    },
-}
-
-# Shared by both cohorts; the same protocol is applied to each
-MAX_FOLLOW_UP = 72  # censor every loan at this age in months; 0 keeps full follow-up
-SEED = 0  # random seed for the subsample, so the CSV is reproducible
-DROP_MISSING_DTI = False  # True drops loans with no DTI instead of flagging them
 
 # ----------------------------------------------------------------------------------------
 # 2. File layout and columns
@@ -423,11 +289,11 @@ def resolve_events(loans: dict, max_follow_up: int) -> pd.DataFrame:
     for loan_id, r in loans.items():
         m0, a0 = r["anchor_month"], r["anchor_age"]
 
-        def to_age(month: int | None) -> int | None:
-            return None if month is None else a0 + (month - m0)
+        def to_age(month: int) -> int:
+            return a0 + (month - m0)
 
-        default_age = to_age(r["default_month"])
-        prepaid_age = to_age(r["prepaid_month"])
+        default_age = None if r["default_month"] is None else to_age(r["default_month"])
+        prepaid_age = None if r["prepaid_month"] is None else to_age(r["prepaid_month"])
         last = to_age(r["last_month"])
 
         if default_age is not None and (
@@ -450,14 +316,14 @@ def resolve_events(loans: dict, max_follow_up: int) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["loan_id", "time", "event", "default_zb_alt"])
 
 
-def parse_vintage(year: int, max_follow_up: int) -> pd.DataFrame:
+def parse_vintage(raw_dir: Path, year: int, max_follow_up: int) -> pd.DataFrame:
     """Build the one-row-per-loan table for a single origination year."""
-    zip_path = RAW_DIR / f"sample_{year}.zip"
+    zip_path = raw_dir / f"sample_{year}.zip"
     if not zip_path.exists():
         raise FileNotFoundError(
             f"{zip_path} not found. Download the {year} sample file from "
             f"https://www.freddiemac.com/research/datasets/sf-loanlevel-dataset "
-            f"and put the zip in {RAW_DIR}/ without renaming it."
+            f"and put the zip in {raw_dir}/ without renaming it."
         )
 
     with zipfile.ZipFile(zip_path) as zf:
@@ -639,7 +505,7 @@ def describe(df: pd.DataFrame) -> None:
         .to_string()
     )
 
-    # Coded columns, printed the way 0_prepare_medical_data.py prints its
+    # Coded columns, printed the way the medical utils print their
     # VALUE_LABELS: every level a column actually takes, with its count. This is
     # what you scan to catch a sentinel that slipped through or a category that
     # appears in one vintage and not another.
@@ -659,7 +525,7 @@ def describe(df: pd.DataFrame) -> None:
     for col in coded:
         vc = df[col].value_counts(dropna=False)
         print(f"  {col}")
-        for val, n in vc.items():
+        for val, n in zip(vc.index.to_list(), vc.to_list()):
             label = CODE_LABELS.get(col, {}).get(val, "")
             shown = "(missing)" if pd.isna(val) else str(val)
             print(f"    {shown:<4} {label:<26} {n:>7,}   {n/len(df):>6.1%}")
@@ -734,113 +600,321 @@ def validate(df: pd.DataFrame, max_follow_up: int, drop_missing_dti: bool) -> No
             print(f"  WARNING: no {name} events in the output")
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(
-        description="Build the financial competing-risks CSV from Freddie Mac data."
-    )
-    ap.add_argument(
-        "--cohort",
-        choices=sorted(COHORTS),
-        required=True,
-        help="which cohort to build; sets the years, the row cap and the output path",
-    )
-    ap.add_argument(
-        "--years",
-        type=int,
-        nargs="+",
-        help="override the cohort's origination years "
-        "(needs sample_YYYY.zip in RAW_DIR)",
-    )
-    ap.add_argument(
-        "--max-rows",
-        type=int,
-        help="override the cohort's row cap; 0 keeps everything. "
-        "Sampled evenly across years.",
-    )
-    ap.add_argument(
-        "--max-follow-up",
-        type=int,
-        default=MAX_FOLLOW_UP,
-        help="censor every loan at this age in months; 0 keeps full follow-up",
-    )
-    ap.add_argument(
-        "--seed",
-        type=int,
-        default=SEED,
-        help="random seed for the subsample, so the CSV is reproducible",
-    )
-    # BooleanOptionalAction, not store_true: store_true can only ever set the
-    # flag to True, so pairing it with a default of True would make the option
-    # impossible to turn off from the command line. This gives both
-    # --drop-missing-dti and --no-drop-missing-dti whatever the default is.
-    ap.add_argument(
-        "--drop-missing-dti",
-        action=argparse.BooleanOptionalAction,
-        default=DROP_MISSING_DTI,
-        help="drop loans with no reported DTI instead of flagging them. "
-        "This removes ~10%% of loans and removes far more from the "
-        "early vintages than the late ones -- read the note on "
-        "REQUIRED before using it.",
-    )
-    ap.add_argument(
-        "--out", type=Path, help="override the cohort's output CSV file"
-    )
-    args = ap.parse_args()
-
-    # The cohort supplies anything not overridden on the command line
-    cohort = COHORTS[args.cohort]
-    if args.years is None:
-        args.years = cohort["years"]
-    if args.max_rows is None:
-        args.max_rows = cohort["max_rows"]
-    if args.out is None:
-        args.out = cohort["out"]
-
-    print(f"cohort        {args.cohort}")
-    print(f"years         {args.years}")
+# ----------------------------------------------------------------------------------------
+# Preparing one cohort
+# ----------------------------------------------------------------------------------------
+def prepare_cohort(
+    cohort: str,
+    raw_dir: Path,
+    years: list,
+    max_rows: int,
+    max_follow_up: int,
+    seed: int,
+    drop_missing_dti: bool,
+    out_file: Path,
+) -> None:
+    """Read the raw archives, clean them, subsample and save one CSV for the cohort."""
+    print(f"cohort        {cohort}")
+    print(f"years         {years}")
+    print(f"max rows      {max_rows:,}" if max_rows else "max rows      (all)")
     print(
-        f"max rows      {args.max_rows:,}" if args.max_rows else "max rows      (all)"
-    )
-    print(
-        f"follow-up     {args.max_follow_up} months"
-        if args.max_follow_up
+        f"follow-up     {max_follow_up} months"
+        if max_follow_up
         else "follow-up     (full)"
     )
-    print(f"seed          {args.seed}")
-    print(f"output        {args.out}\n")
+    print(f"seed          {seed}")
+    print(f"output        {out_file}\n")
 
     parts = []
-    for year in args.years:
+    for year in years:
         print(f"parsing {year} ...", flush=True)
-        block = parse_vintage(year, args.max_follow_up)
+        block = parse_vintage(raw_dir, year, max_follow_up)
         print(f"    {len(block):,} loans")
         parts.append(block)
 
     df = pd.concat(parts, ignore_index=True)
 
     print(f"\ncleaning {len(df):,} loans")
-    df, report = clean(df, drop_missing_dti=args.drop_missing_dti)
+    df, report = clean(df, drop_missing_dti=drop_missing_dti)
     for line in report:
         print(line)
 
-    if args.max_rows and len(df) > args.max_rows:
+    if max_rows and len(df) > max_rows:
         print(
-            f"\nsubsampling {len(df):,} -> {args.max_rows:,} "
-            f"(stratified by year, seed {args.seed})"
+            f"\nsubsampling {len(df):,} -> {max_rows:,} "
+            f"(stratified by year, seed {seed})"
         )
-        df = subsample(df, args.max_rows, args.seed)
+        df = subsample(df, max_rows, seed)
 
     df = df[[c for c in OUTPUT_COLS if c in df.columns]]
-    validate(df, args.max_follow_up, args.drop_missing_dti)
+    validate(df, max_follow_up, drop_missing_dti)
 
-    path = args.out
-    path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(path, index=False)
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(out_file, index=False)
 
     describe(df)
-    size_mb = path.stat().st_size / 1024 / 1024
-    print(f"\nwrote {path}  ({size_mb:.1f} MB)")
+    size_mb = out_file.stat().st_size / 1024 / 1024
+    print(f"\nwrote {out_file}  ({size_mb:.1f} MB)")
 
 
-if __name__ == "__main__":
-    main()
+# ----------------------------------------------------------------------------------------
+# Normalizing
+# ----------------------------------------------------------------------------------------
+COLUMNS_TO_SCALE = [
+    "fico",
+    "cltv",
+    "dti",
+    "orig_upb",
+    "orig_rate",
+    "orig_term",
+    "mi_pct",
+    "n_units",
+    "n_borrowers",
+]
+
+
+CATEGORY_LEVELS = {
+    "first_time_buyer": ["N", "Y"],
+    "occupancy": ["P", "I", "S"],
+    "channel": ["R", "B", "C", "T"],
+    "loan_purpose": ["P", "C", "N"],
+    "property_type": ["SF", "PU", "CO", "MH", "CP"],
+    "division": [
+        "South Atlantic",
+        "East North Central",
+        "East South Central",
+        "Middle Atlantic",
+        "Mountain",
+        "New England",
+        "Pacific",
+        "Territory",
+        "West North Central",
+        "West South Central",
+    ],
+}
+
+
+MISSING_CODES = {
+    "first_time_buyer": ["9"],
+    "occupancy": ["9"],
+    "channel": ["9"],
+    "loan_purpose": ["9"],
+    "property_type": ["99"],
+}
+
+PASSTHROUGH = ["loan_id", "vintage", "time", "event", "dti_missing"]
+
+COLUMNS_TO_DROP = ["ltv", "state", "default_zb_alt"]
+
+GROUP_COLUMN = "vintage"
+ID_COLUMN = "loan_id"
+
+DIVISIONS = {
+    "New England": ["CT", "ME", "MA", "NH", "RI", "VT"],
+    "Middle Atlantic": ["NJ", "NY", "PA"],
+    "East North Central": ["IL", "IN", "MI", "OH", "WI"],
+    "West North Central": ["IA", "KS", "MN", "MO", "NE", "ND", "SD"],
+    "South Atlantic": ["DE", "DC", "FL", "GA", "MD", "NC", "SC", "VA", "WV"],
+    "East South Central": ["AL", "KY", "MS", "TN"],
+    "West South Central": ["AR", "LA", "OK", "TX"],
+    "Mountain": ["AZ", "CO", "ID", "MT", "NV", "NM", "UT", "WY"],
+    "Pacific": ["AK", "CA", "HI", "OR", "WA"],
+    "Territory": ["GU", "PR", "VI"],
+}
+STATE_TO_DIVISION = {s: d for d, states in DIVISIONS.items() for s in states}
+
+
+# ----------------------------------------------------------------------------------------
+# Reading
+# ----------------------------------------------------------------------------------------
+def read_inputs(table: Path, folds_file: Path) -> tuple:
+    for path in (table, folds_file):
+        if not path.exists():
+            sys.exit(f"File not found: {path.resolve()}")
+
+    as_text = {c: str for c in CATEGORY_LEVELS if c != "division"}
+    df = pd.read_csv(table, dtype=as_text)
+    df = df.sort_values([GROUP_COLUMN, ID_COLUMN]).reset_index(drop=True)
+    spec = json.loads(folds_file.read_text())
+    print(f"Read {len(df):,} rows from {table}")
+    print(f"Read folds from {folds_file}")
+
+    if len(df) != spec["n"]:
+        sys.exit(
+            f"The folds were made for {spec['n']:,} rows but the table has {len(df):,}. "
+            "Run the folds step again."
+        )
+
+    unknown = set(df["state"]) - set(STATE_TO_DIVISION)
+    if unknown:
+        sys.exit(f"No Census division for {sorted(unknown)}; add them to DIVISIONS.")
+    df["division"] = df["state"].map(STATE_TO_DIVISION)
+    df = df.drop(columns=COLUMNS_TO_DROP)
+
+    recoded = {}
+    for col, levels in CATEGORY_LEVELS.items():
+        if df[col].isna().any():
+            sys.exit(
+                f"{col} is blank on {int(df[col].isna().sum())} row(s); "
+                "decide how to code them before encoding."
+            )
+        codes = MISSING_CODES.get(col, [])
+        n = int(df[col].isin(codes).sum())
+        if n:
+            recoded[col] = n
+            df.loc[df[col].isin(codes), col] = levels[0]
+        unexpected = set(df[col].dropna()) - set(levels)
+        if unexpected:
+            sys.exit(f"{col} holds undeclared level(s) {sorted(unexpected)}.")
+    if recoded:
+        print(
+            "  not-available codes folded into the reference level: "
+            + ", ".join(
+                f"{c} {n} row(s) -> {CATEGORY_LEVELS[c][0]}" for c, n in recoded.items()
+            )
+        )
+
+    expected = set(PASSTHROUGH) | set(COLUMNS_TO_SCALE) | set(CATEGORY_LEVELS)
+    missing, extra = expected - set(df.columns), set(df.columns) - expected
+    if missing or extra:
+        sys.exit(
+            f"Column mismatch. Missing: {sorted(missing)}. Unexpected: {sorted(extra)}."
+        )
+    return df, spec
+
+
+# ----------------------------------------------------------------------------------------
+# Per-fold preprocessing
+# ----------------------------------------------------------------------------------------
+def normalize_fold(df: pd.DataFrame, train_idx: list, test_idx: list) -> tuple:
+    train, test = df.iloc[train_idx].copy(), df.iloc[test_idx].copy()
+    assert not set(train[ID_COLUMN]) & set(test[ID_COLUMN])
+
+    params: dict = {"impute": {}, "scale": {}, "encode": {}}
+    notes = {"imputed": 0, "constant": [], "zero_variance": []}
+
+    # The prepare step leaves dti, cltv and n_borrowers empty rather than
+    # filling them, and says so under "NEVER IMPUTES". This is not a disagreement:
+    # that script sees one cohort with no train/test boundary, so any median it
+    # computed would run over rows that become test rows in every fold. "The training
+    # rows" only exists once the folds are built, which makes this the first place
+    # the fill can be done without leaking. dti keeps dti_missing as a feature; cltv
+    # (9 calm loans) and n_borrowers (19 crisis) get no flag, too rare to carry one.
+    for col in COLUMNS_TO_SCALE:
+        n_missing = int(train[col].isna().sum() + test[col].isna().sum())
+        if n_missing == 0:
+            continue
+        median = float(train[col].median())
+        params["impute"][col] = median
+        notes["imputed"] += n_missing
+        for part in (train, test):
+            part[col] = part[col].fillna(median)
+
+    for col in COLUMNS_TO_SCALE:
+        mean, sd = float(train[col].mean()), float(train[col].std())
+        if sd == 0 or not np.isfinite(sd):
+            notes["zero_variance"].append(col)
+            sd = 1.0
+        params["scale"][col] = {"mean": mean, "sd": sd}
+        for part in (train, test):
+            part[col] = ((part[col] - mean) / sd).astype("float64")
+
+    train = train.rename(columns={c: f"{c}_std" for c in COLUMNS_TO_SCALE})
+    test = test.rename(columns={c: f"{c}_std" for c in COLUMNS_TO_SCALE})
+
+    blocks = {"train": [], "test": []}
+    for col, levels in CATEGORY_LEVELS.items():
+        reference, candidates = levels[0], levels[1:]
+        kept = [lvl for lvl in candidates if (train[col] == lvl).any()]
+        notes["constant"] += [f"{col}={lvl}" for lvl in candidates if lvl not in kept]
+        params["encode"][col] = {"reference": reference, "columns": kept}
+        for name, part in (("train", train), ("test", test)):
+            blocks[name].append(
+                pd.DataFrame(
+                    {f"{col}={lvl}": (part[col] == lvl).astype("int8") for lvl in kept},
+                    index=part.index,
+                )
+            )
+
+    scaled = [f"{c}_std" for c in COLUMNS_TO_SCALE]
+    train_out = pd.concat([train[PASSTHROUGH + scaled], *blocks["train"]], axis=1)
+    test_out = pd.concat([test[PASSTHROUGH + scaled], *blocks["test"]], axis=1)
+    test_out = test_out[train_out.columns]
+
+    assert not train_out.isna().any().any(), "NaN left in the training rows"
+    assert not test_out.isna().any().any(), "NaN left in the test rows"
+    return train_out, test_out, params, notes
+
+
+def normalize_arm(
+    df: pd.DataFrame, folds: list, cohort: str, arm: str, output_dir: Path
+) -> list:
+    folder = output_dir / cohort / arm
+    folder.mkdir(parents=True, exist_ok=True)
+    print(f"\n--- {cohort} / {arm}: {len(folds)} folds, saved in {folder} ---")
+
+    scaled = [f"{c}_std" for c in COLUMNS_TO_SCALE]
+    summary, all_params, dropped = [], [], set()
+    for i, fold in enumerate(folds, start=1):
+        train, test, params, notes = normalize_fold(df, fold["train"], fold["test"])
+        train.to_csv(folder / f"fold_{i}_train.csv", index=False)
+        test.to_csv(folder / f"fold_{i}_test.csv", index=False)
+        all_params.append({"fold": i, **params})
+        dropped |= set(notes["constant"])
+
+        summary.append(
+            {
+                "fold": i,
+                "n_train": len(train),
+                "n_test": len(test),
+                "n_cols": train.shape[1],
+                "train_mean": round(float(train[scaled].to_numpy().mean()), 4),
+                "train_sd": round(float(np.mean([train[c].std() for c in scaled])), 4),
+                "test_fico_mean": round(float(test["fico_std"].mean()), 3),
+                "test_cltv_mean": round(float(test["cltv_std"].mean()), 3),
+                "test_dti_mean": round(float(test["dti_std"].mean()), 3),
+                "imputed": notes["imputed"],
+            }
+        )
+        if notes["zero_variance"]:
+            print(
+                f"  fold {i}: no variance in the training rows for "
+                f"{notes['zero_variance']}, sd set to 1"
+            )
+    print(pd.DataFrame(summary).to_string(index=False))
+    if dropped:
+        print(f"  no column for {sorted(dropped)}: absent from the training rows")
+
+    per_fold = [
+        tuple(sorted(col for c in CATEGORY_LEVELS for col in p["encode"][c]["columns"]))
+        for p in all_params
+    ]
+    if len(set(per_fold)) > 1:
+        sys.exit(f"  {cohort}/{arm}: the folds do not share one design matrix.")
+    return all_params
+
+
+# ----------------------------------------------------------------------------------------
+
+
+def normalize_cohort(
+    cohort: str, table: Path, folds_file: Path, output_dir: Path
+) -> None:
+    """Impute, scale and encode each fold with its own training rows and save it."""
+    print(f"Scaling  {COLUMNS_TO_SCALE}")
+    print(f"Encoding {list(CATEGORY_LEVELS)}")
+    print("with the statistics of the training rows of each fold only, then applying")
+    print("them to its test rows.\n")
+
+    print("=" * 92)
+    print(f"{cohort.upper()} COHORT")
+    print("=" * 92)
+    df, spec = read_inputs(table, folds_file)
+
+    params = {}
+    for arm in ("temporal", "random"):
+        params[arm] = normalize_arm(df, spec[arm], cohort, arm, output_dir)
+
+    params_file = output_dir / cohort / "scaling.json"
+    params_file.write_text(json.dumps(params, indent=1))
+    print(f"\nSaved {params_file}\n")
