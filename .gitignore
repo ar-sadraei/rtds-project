@@ -1,8 +1,8 @@
 # ---- data ------------------------------------------------------------
 # Freddie Mac SFLLD archives are free for academic use but may not be
-# redistributed, so nothing under data/ is tracked. src/build_dataset.py
-# rebuilds data/processed/ from the downloaded archives; DATA.md has the
-# download steps and the field layout reference.
+# redistributed, so nothing under data/ is tracked. The pipelines in
+# src/pipelines/ rebuild everything from the raw files; README.md has the
+# download links.
 data/
 
 # ---- environment -----------------------------------------------------
