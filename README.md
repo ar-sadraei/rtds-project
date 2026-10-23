@@ -58,6 +58,13 @@ notes under "Datasets".
 | medical | `data/medical/0_raw/mortality/` | one `.dat` file per cycle |
 | financial | `data/financial/0_raw/` | `sample_YYYY.zip` for every year, not renamed |
 
+
+The medical folders moved too. Folds went from `3_folds` to `2_folds` and the
+normalized folds from `4_normalized` to `3_normalized`, because the separate
+preprocessing step is now part of the merge. Rebuild those by running the pipeline
+rather than moving them, since folds are saved row positions and the merged table
+changed.
+
 **3. Run.** From the project folder:
 
 ```bash

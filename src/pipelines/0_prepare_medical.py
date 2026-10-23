@@ -35,6 +35,10 @@ MIN_AGE_YEARS = 20
 # Cut follow-up at this many months
 HORIZON_MONTHS = 72
 
+# Last usable survey cycle. Mortality is linked through 2019, so nobody interviewed
+# in 2015 to 2018 reaches 72 months of follow-up.
+MAX_CYCLE = "2013-2014"
+
 SEED = 0
 
 
@@ -43,6 +47,7 @@ def main() -> None:
     df = medical_utils.merge_and_clean(
         DEMOGRAPHY_DIR, SMOKING_DIR, MORTALITY_DIR, MIN_AGE_YEARS
     )
+    df = medical_utils.keep_cycles(df, MAX_CYCLE)
     medical_utils.show_preview(df)
     df = medical_utils.add_labels(df, HORIZON_MONTHS)
     MERGED_FILE.parent.mkdir(parents=True, exist_ok=True)

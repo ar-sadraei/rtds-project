@@ -334,6 +334,27 @@ def show_preview(df: pd.DataFrame) -> None:
 # ----------------------------------------------------------------------------------------
 # Recoding
 # ----------------------------------------------------------------------------------------
+def keep_cycles(df: pd.DataFrame, max_cycle: str) -> pd.DataFrame:
+    """
+    Drop survey cycles that cannot reach the horizon.
+
+    Mortality is linked through 2019, so a participant interviewed in 2015 to 2018 has
+    at most 61 months of follow-up and none of them can be observed at 72 months. Their
+    censoring distribution is zero at that horizon, which makes every
+    inverse-probability-of-censoring weight undefined. They also leak into the random
+    arm, whose folds sample the whole table, so the arm comparison would be confounded
+    with how long people were observed rather than with the assignment rule.
+    """
+    before = len(df)
+    out = df[df[GROUP_COLUMN] <= max_cycle].reset_index(drop=True)
+    dropped = sorted(set(df[GROUP_COLUMN]) - set(out[GROUP_COLUMN]))
+    print(
+        f"Removed {before - len(out):,} participants from cycles after {max_cycle} "
+        f"({', '.join(dropped) if dropped else 'none'}), {len(out):,} left."
+    )
+    return out
+
+
 def add_labels(df: pd.DataFrame, horizon_months: int) -> pd.DataFrame:
     """Add the time and event columns, with follow-up cut at the horizon."""
     out = df.copy()
