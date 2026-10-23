@@ -27,6 +27,19 @@ __pycache__/
 !report/tab_*.tex
 !report/fig_*.pdf
 
+# ---- notebooks -------------------------------------------------------
+# The benchmark is Python files, not notebooks. The two teaching notebooks
+# are kept locally for reference and are not part of the pipeline.
+notebooks/
+
+# ---- run output ------------------------------------------------------
+# Metrics, logs and figures written by the benchmark. Until now only *.log
+# was ignored, which covered everything in results/ by coincidence: a
+# metrics CSV would have been picked up by a bare `git add -A`. When the
+# final tables for the paper are settled, add them deliberately with
+# `git add -f results/<file>`.
+results/
+
 # ---- os --------------------------------------------------------------
 .DS_Store
 
