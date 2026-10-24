@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from utils import benchmark_utils
+from utils import benchmark_utils, report_utils
 
 # ----------------------------------------------------------------------------------------
 # 1. Folders and settings
@@ -30,9 +30,7 @@ BUDGET = 10
 
 
 def main() -> None:
-    print("=" * 92)
-    print("MEDICAL")
-    print("=" * 92)
+    report_utils.h1("MEDICAL: TUNING")
     benchmark_utils.tune(
         NORMALIZED_DIR,
         "temporal",

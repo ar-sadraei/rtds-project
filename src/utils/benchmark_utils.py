@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from . import metric_utils
+from . import metric_utils, report_utils
 from .model_utils import MODELS, SEARCH_SPACE
 
 HORIZONS = np.array([12.0, 24.0, 36.0, 48.0, 60.0, 72.0])
@@ -69,30 +69,33 @@ def sample_configs(space, budget, seed=0):
 
 
 def tune(folds_dir, arm, n_folds, id_col, group_col, n_causes, budget, out_file):
-    
-    # Pick hyperparameters once per model on an out-of-time validation split.
-    
+    """Pick hyperparameters once per model on an out-of-time validation split."""
     X, t, e, _, _, _, _ = load_fold(folds_dir, arm, n_folds, id_col, group_col)
     groups = pd.read_csv(Path(folds_dir) / arm / f"fold_{n_folds}_train.csv")[group_col]
     levels = sorted(groups.unique())
     is_val = (groups == levels[-1]).to_numpy()
-    print(
-        f"  validation split: train on {levels[0]} to {levels[-2]} "
+    report_utils.log(
+        f"Validation split: train on {levels[0]} to {levels[-2]} "
         f"({int((~is_val).sum()):,} rows), validate on {levels[-1]} "
         f"({int(is_val.sum()):,} rows)"
     )
 
     best = {}
-    for name in MODELS:
+    summary = []
+    for name, fit in MODELS.items():
         configs = sample_configs(SEARCH_SPACE[name], budget)
         if configs == [{}]:
-            print(f"  {name:<11} no hyperparameters, reported untuned")
+            report_utils.log(f"{name:<10} no hyperparameters, untuned")
             best[name] = {}
+            summary.append(
+                {"Model": name, "Configs": 0, "Best IBS": np.nan, "Settings": "untuned"}
+            )
             continue
         scores = []
         for i, params in enumerate(configs, 1):
+            tag = f"{name:<10} {i:>2}/{len(configs)}"
             try:
-                cif, _, _ = MODELS[name](
+                cif, _, _ = fit(
                     params,
                     X[~is_val],
                     t[~is_val],
@@ -111,26 +114,40 @@ def tune(folds_dir, arm, n_folds, id_col, group_col, n_causes, budget, out_file)
                     n_causes,
                 )
                 ibs = [r["value"] for r in rows if r["metric"] == "ibs" and r["value"]]
-                scores.append((float(np.mean(ibs)) if ibs else np.inf, params))
+                score = float(np.mean(ibs)) if ibs else np.inf
+                scores.append((score, params))
+                report_utils.log(
+                    f"{tag}  IBS {score:.5f}  {report_utils.settings(params)}"
+                )
             except Exception as err:
-                print(f"    {name} config {i} failed: {type(err).__name__}")
                 scores.append((np.inf, params))
+                report_utils.log(
+                    f"{tag}  failed ({type(err).__name__})  "
+                    f"{report_utils.settings(params)}"
+                )
         scores.sort(key=lambda s: s[0])
         best[name] = scores[0][1]
-        print(
-            f"  {name:<11} {len(configs):>2} configs, best IBS {scores[0][0]:.5f}  {scores[0][1]}"
+        summary.append(
+            {
+                "Model": name,
+                "Configs": len(configs),
+                "Best IBS": scores[0][0],
+                "Settings": report_utils.settings(scores[0][1], sep="\n"),
+            }
         )
 
     Path(out_file).parent.mkdir(parents=True, exist_ok=True)
     Path(out_file).write_text(json.dumps(best, indent=1, default=str))
-    print(f"\n  saved {out_file}")
+    report_utils.log(f"Saved {out_file}")
+    report_utils.h2("Results")
+    report_utils.table(pd.DataFrame(summary))
     return best
 
 
 def read_params(path):
     p = Path(path)
     if not p.exists():
-        print(f"  no tuning file at {p}, using library defaults")
+        report_utils.log(f"No tuning file at {p}, using library defaults")
         return {name: {} for name in MODELS}
     raw = json.loads(p.read_text())
     # json turns the layer lists into strings when they came from a tuple
@@ -151,8 +168,11 @@ def run(label, folds_dir, n_folds, id_col, group_col, n_causes, params, out_file
         done = set(
             map(tuple, old[["arm", "fold", "model"]].drop_duplicates().to_numpy())
         )
-        print(f"  {out} already holds {len(done)} finished cells, skipping those")
+        report_utils.log(
+            f"{out} already holds {len(done)} finished cells, skipping those"
+        )
 
+    stats = []
     for arm in ("temporal", "random"):
         for k in range(1, n_folds + 1):
             X_tr, t_tr, e_tr, X_te, t_te, e_te, cols = load_fold(
@@ -188,8 +208,20 @@ def run(label, folds_dir, n_folds, id_col, group_col, n_causes, params, out_file
                 frame.to_csv(out, mode="a", header=not out.exists(), index=False)
 
                 took = time.perf_counter() - started
+                stats.append({"Model": name, "Failed": bool(failed), "Seconds": took})
                 note = failed if failed else f"{len(rows)} numbers"
-                print(
-                    f"  {arm:<8} fold {k} {name:<11} {took:>6.1f}s  {note}", flush=True
-                )
-    print(f"\n  wrote {out}")
+                report_utils.log(f"{arm:<8} fold {k} {name:<11} {took:>6.1f}s  {note}")
+    report_utils.log(f"Wrote {out}")
+    if stats:
+        report_utils.h2("This run")
+        grouped = pd.DataFrame(stats).groupby("Model", sort=False)
+        report_utils.table(
+            grouped.agg(
+                Fits=("Failed", "size"),
+                Failed=("Failed", "sum"),
+                Mean_seconds=("Seconds", "mean"),
+            )
+            .rename(columns={"Mean_seconds": "Mean seconds"})
+            .reset_index(),
+            decimals=1,
+        )

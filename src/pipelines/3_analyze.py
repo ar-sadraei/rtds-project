@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-    venv/bin/python src/pipelines/3_analyze.py
+venv/bin/python src/pipelines/3_analyze.py
 """
 
 import sys
@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pandas as pd
 
 from utils import analysis_utils as A
+from utils import report_utils
 
 # ----------------------------------------------------------------------------------------
 # 1. Folders and settings
@@ -22,46 +23,44 @@ BENCHMARK_FILES = (
 )
 OUTPUT_DIR = Path("data/analysis")
 
-pd.set_option("display.width", 200)
-pd.set_option("display.max_columns", 50)
-
-
-def banner(text):
-    print("\n" + "=" * 92)
-    print(text)
-    print("=" * 92)
-
 
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    report_utils.h1("ANALYZE")
     raw = A.load(BENCHMARK_FILES)
     folds = A.per_fold(raw)
-    print(
-        f"\nread {len(raw):,} numbers covering "
+    report_utils.log(
+        f"Read {len(raw):,} numbers covering "
         f"{folds.groupby(['dataset','arm','fold','model']).ngroups} fitted models"
     )
 
-    banner("HEADLINE: every metric by dataset, arm and model")
+    report_utils.h2("Headline: every metric by dataset, arm and model")
     table = A.summary(folds)
-    print(table.to_string(index=False, float_format=lambda v: f"{v:.5f}"))
+    report_utils.table(table)
     table.to_csv(OUTPUT_DIR / "summary.csv", index=False)
 
-    banner("MAIN QUESTION: do the four models differ?")
+    report_utils.h2("Main question: do the four models differ?")
+    tests = []
     for metric in ("concordance", "ibs", "aj_calibration", "cr_d_calibration"):
         r = A.friedman(folds, metric)
         if r is None:
-            print(f"  {metric}: not enough complete blocks")
+            report_utils.log(f"{metric}: not enough complete blocks")
             continue
-        print(
-            f"\n  {metric} (Friedman, {r['blocks']} blocks): "
-            f"chi2 = {r['statistic']:.2f}, p = {r['p_value']:.2e}"
+        tests.append(
+            {
+                "metric": metric,
+                "blocks": r["blocks"],
+                "chi2": f"{r['statistic']:.2f}",
+                "p": f"{r['p_value']:.2e}",
+                "mean rank, best first": ", ".join(
+                    f"{m} {v:.2f}" for m, v in r["mean_ranks"].items()
+                ),
+            }
         )
-        print(
-            "    mean rank, best first: "
-            + ", ".join(f"{m} {v:.2f}" for m, v in r["mean_ranks"].items())
-        )
+    if tests:
+        report_utils.table(pd.DataFrame(tests), right=("chi2", "p"))
 
-    banner("MAIN QUESTION: deep minus classical on the same folds")
+    report_utils.h2("Main question: deep minus classical on the same folds")
     gaps = pd.concat(
         [
             A.family_gap(folds, m)
@@ -70,32 +69,34 @@ def main() -> None:
         ignore_index=True,
     )
     gaps["favours"] = ["deep" if v > 0 else "classical" for v in gaps["mean"]]
-    print(gaps.to_string(index=False, float_format=lambda v: f"{v:.5f}"))
+    report_utils.table(gaps)
     gaps.to_csv(OUTPUT_DIR / "family_gap.csv", index=False)
 
-    banner("SQ1: temporal minus random, per model and metric")
+    report_utils.h2("SQ1: temporal minus random, per model and metric")
     eff = A.arm_effect(folds)
     if len(eff):
-        print(eff.to_string(index=False, float_format=lambda v: f"{v:.5f}"))
+        report_utils.table(eff)
         eff.to_csv(OUTPUT_DIR / "arm_effect.csv", index=False)
 
-    banner("SQ2: does the discrimination ranking agree with the calibration ranking?")
+    report_utils.h2(
+        "SQ2: does the discrimination ranking agree with the calibration ranking?"
+    )
     agree = A.rank_agreement(folds)
     if len(agree):
-        print(agree.to_string(index=False, float_format=lambda v: f"{v:.3f}"))
+        report_utils.table(agree, decimals=3)
         agree.to_csv(OUTPUT_DIR / "rank_agreement.csv", index=False)
 
-    banner("COST: seconds to fit and to predict")
+    report_utils.h2("Cost: seconds to fit and to predict")
     cost = (
         raw.groupby(["dataset", "model"])[["fit_seconds", "predict_seconds"]]
         .mean()
         .round(2)
         .reset_index()
     )
-    print(cost.to_string(index=False))
+    report_utils.table(cost, decimals=2)
     cost.to_csv(OUTPUT_DIR / "cost.csv", index=False)
 
-    print(f"\nsaved tables in {OUTPUT_DIR}")
+    report_utils.log(f"Saved tables in {OUTPUT_DIR}")
 
 
 if __name__ == "__main__":

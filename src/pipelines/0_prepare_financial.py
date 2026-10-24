@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from utils import financial_utils, fold_utils
+from utils import financial_utils, fold_utils, report_utils
 
 # ----------------------------------------------------------------------------------------
 # 1. Folders and settings (edit these)
@@ -57,11 +57,8 @@ SEED = 0
 
 def main() -> None:
     for cohort, cfg in COHORTS.items():
-        print("=" * 92)
-        print(f"{cohort.upper()} COHORT")
-        print("=" * 92)
-
-        print("\n=== Step 1: prepare ===")
+        report_utils.h1(f"{cohort} cohort: prepare")
+        report_utils.h2("Read and clean")
         financial_utils.prepare_cohort(
             cohort,
             RAW_DIR,
@@ -73,7 +70,7 @@ def main() -> None:
             cfg["table"],
         )
 
-        print("\n=== Step 2: folds ===")
+        report_utils.h2("Folds")
         fold_utils.make_folds(
             cfg["table"],
             financial_utils.GROUP_COLUMN,
@@ -84,7 +81,7 @@ def main() -> None:
             SEED,
         )
 
-        print("\n=== Step 3: normalize inside each fold ===")
+        report_utils.h2("Normalize inside each fold")
         financial_utils.normalize_cohort(
             cohort, cfg["table"], cfg["folds"], NORMALIZED_DIR
         )

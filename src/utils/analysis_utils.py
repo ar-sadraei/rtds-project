@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+from . import report_utils
+
 PRIMARY_HORIZON = 72.0
 LOWER_IS_BETTER = {"ibs", "aj_calibration", "cr_d_calibration", "incoherent_cells"}
 # Reported but never ranked on: diagnostics, not performance
@@ -23,13 +25,15 @@ def load(paths):
     df = pd.concat(frames, ignore_index=True)
     failed = df[df.error.notna() & (df.error != "")]
     if len(failed):
-        print("  fits that failed:")
+        report_utils.log("Fits that failed:")
         for _, r in (
             failed[["dataset", "arm", "fold", "model", "error"]]
             .drop_duplicates()
             .iterrows()
         ):
-            print(f"    {r.dataset} {r.arm} fold {r.fold} {r.model}: {r.error}")
+            report_utils.log(
+                f"  {r.dataset} {r.arm} fold {r.fold} {r.model}: {r.error}"
+            )
     return df[df.value.notna()]
 
 

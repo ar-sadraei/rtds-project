@@ -18,7 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 warnings.filterwarnings("ignore")
 
-from utils import benchmark_utils
+from utils import benchmark_utils, report_utils
 
 # ----------------------------------------------------------------------------------------
 # 1. Folders and settings (edit these)
@@ -39,9 +39,7 @@ N_CAUSES = 2
 
 def main() -> None:
     for cohort, n_folds in COHORTS:
-        print("=" * 92)
-        print(f"{cohort.upper()} COHORT, {n_folds} folds per arm")
-        print("=" * 92)
+        report_utils.h1(f"{cohort.upper()} COHORT: BENCHMARK, {n_folds} FOLDS PER ARM")
         params = benchmark_utils.read_params(TUNING_DIR / f"{cohort}.json")
         benchmark_utils.run(
             f"financial-{cohort}",

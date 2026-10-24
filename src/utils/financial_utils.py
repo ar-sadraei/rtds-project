@@ -13,6 +13,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from . import report_utils
+
 # ----------------------------------------------------------------------------------------
 # 2. File layout and columns
 # ----------------------------------------------------------------------------------------
@@ -339,10 +341,10 @@ def parse_vintage(raw_dir: Path, year: int, max_follow_up: int) -> pd.DataFrame:
     df.insert(1, "vintage", year)
 
     if malformed:
-        print(f"    skipped {malformed:,} malformed performance rows")
+        report_utils.log(f"Skipped {malformed:,} malformed performance rows")
     only_orig = len(orig) - len(df)
     if only_orig:
-        print(f"    dropped {only_orig:,} loans with no performance records")
+        report_utils.log(f"Dropped {only_orig:,} loans with no performance records")
 
     return df
 
@@ -473,43 +475,42 @@ def subsample(df: pd.DataFrame, max_rows: int, seed: int) -> pd.DataFrame:
 
 def describe(df: pd.DataFrame) -> None:
     """Print the summary you should read before handing this file to anyone."""
-    print("\n" + "=" * 66)
-    print(f"FINAL DATASET: {len(df):,} loans")
-    print("=" * 66)
+    report_utils.h2(f"Final dataset: {len(df):,} loans")
 
+    names = {0: "censored", 1: "default", 2: "prepaid"}
     counts = df.event.value_counts().reindex([0, 1, 2]).fillna(0).astype(int)
-    share = counts / len(df)
-    print("\noutcome distribution")
-    for code, name in [(0, "censored"), (1, "default"), (2, "prepaid")]:
-        print(f"  {name:<10} {counts[code]:>8,}   {share[code]:>6.2%}")
-
-    print("\nby origination year")
-    tab = pd.crosstab(
-        df.vintage, df.event.map({0: "censored", 1: "default", 2: "prepaid"})
-    )
-    print(tab.to_string())
-
-    print("\nfollow-up time (months)")
-    print(
-        f"  median {df.time.median():.0f}   mean {df.time.mean():.1f}   "
-        f"max {df.time.max():.0f}"
+    report_utils.log("Outcome distribution")
+    report_utils.table(
+        pd.DataFrame(
+            {
+                "Outcome": list(names.values()),
+                "Loans": [counts[c] for c in names],
+                "Share": [f"{counts[c] / len(df):.2%}" for c in names],
+            }
+        ),
+        right=("Share",),
     )
 
-    print("\nnumeric covariates")
+    report_utils.log("By origination year")
+    tab = pd.crosstab(df.vintage, df.event.map(names))
+    tab.columns.name = None
+    report_utils.table(tab.reset_index())
+
+    report_utils.log(
+        f"Follow-up time (months): median {df.time.median():.0f}, "
+        f"mean {df.time.mean():.1f}, max {df.time.max():.0f}"
+    )
+
+    report_utils.log("Numeric covariates")
     num = [c for c in NUMERIC_RULES if c in df.columns]
-    print(
-        df[num]
-        .describe()
-        .T[["count", "mean", "std", "min", "max"]]
-        .round(2)
-        .to_string()
-    )
+    stats = df[num].describe().T[["count", "mean", "std", "min", "max"]]
+    stats["count"] = stats["count"].astype(int)
+    report_utils.table(stats.rename_axis("Covariate").reset_index(), decimals=2)
 
-    # Coded columns, printed the way the medical utils print their
-    # VALUE_LABELS: every level a column actually takes, with its count. This is
+    # Coded columns: every level a column actually takes, with its count. This is
     # what you scan to catch a sentinel that slipped through or a category that
     # appears in one vintage and not another.
-    print("\ncoded columns, observed values")
+    report_utils.log("Coded columns, observed values")
     coded = [
         c
         for c in (
@@ -522,30 +523,45 @@ def describe(df: pd.DataFrame) -> None:
         )
         if c in df.columns
     ]
+    rows = []
     for col in coded:
         vc = df[col].value_counts(dropna=False)
-        print(f"  {col}")
         for val, n in zip(vc.index.to_list(), vc.to_list()):
-            label = CODE_LABELS.get(col, {}).get(val, "")
-            shown = "(missing)" if pd.isna(val) else str(val)
-            print(f"    {shown:<4} {label:<26} {n:>7,}   {n/len(df):>6.1%}")
+            rows.append(
+                {
+                    "Column": col,
+                    "Value": "(missing)" if pd.isna(val) else str(val),
+                    "Meaning": CODE_LABELS.get(col, {}).get(val, ""),
+                    "Loans": n,
+                    "Share": f"{n / len(df):.1%}",
+                }
+            )
+    report_utils.table(pd.DataFrame(rows), right=("Share",))
 
     if "state" in df.columns:
         top = df.state.value_counts()
-        print(
-            f"  state\n    {top.index[0]} is the most common of "
+        report_utils.log(
+            f"state: {top.index[0]} is the most common of "
             f"{df.state.nunique()} states, {top.iloc[0]:,} loans "
-            f"({top.iloc[0]/len(df):.1%})"
+            f"({top.iloc[0] / len(df):.1%})"
         )
 
     n_missing = df.isna().sum()
     n_missing = n_missing[n_missing > 0]
     if len(n_missing):
-        print("\nremaining missing values (optional covariates only)")
-        for col, n in n_missing.items():
-            print(f"  {col:<13} {n:>7,}  ({n/len(df):.1%})")
+        report_utils.log("Remaining missing values (optional covariates only)")
+        report_utils.table(
+            pd.DataFrame(
+                {
+                    "Column": n_missing.index,
+                    "Missing": n_missing.to_numpy(),
+                    "Share": [f"{n / len(df):.1%}" for n in n_missing],
+                }
+            ),
+            right=("Share",),
+        )
     else:
-        print("\nno missing values remain")
+        report_utils.log("No missing values remain")
 
 
 def validate(df: pd.DataFrame, max_follow_up: int, drop_missing_dti: bool) -> None:
@@ -597,7 +613,7 @@ def validate(df: pd.DataFrame, max_follow_up: int, drop_missing_dti: bool) -> No
     # Soft checks: legal, but you probably did not mean them.
     for code, name in ((0, "censored"), (1, "default"), (2, "prepaid")):
         if (df.event == code).sum() == 0:
-            print(f"  WARNING: no {name} events in the output")
+            report_utils.log(f"WARNING: no {name} events in the output")
 
 
 # ----------------------------------------------------------------------------------------
@@ -614,34 +630,37 @@ def prepare_cohort(
     out_file: Path,
 ) -> None:
     """Read the raw archives, clean them, subsample and save one CSV for the cohort."""
-    print(f"cohort        {cohort}")
-    print(f"years         {years}")
-    print(f"max rows      {max_rows:,}" if max_rows else "max rows      (all)")
-    print(
-        f"follow-up     {max_follow_up} months"
-        if max_follow_up
-        else "follow-up     (full)"
+    settings = {
+        "cohort": cohort,
+        "years": years,
+        "max rows": f"{max_rows:,}" if max_rows else "(all)",
+        "follow-up": f"{max_follow_up} months" if max_follow_up else "(full)",
+        "seed": seed,
+        "output": out_file,
+    }
+    report_utils.table(
+        pd.DataFrame(
+            {"Setting": list(settings), "Value": [str(v) for v in settings.values()]}
+        )
     )
-    print(f"seed          {seed}")
-    print(f"output        {out_file}\n")
 
     parts = []
     for year in years:
-        print(f"parsing {year} ...", flush=True)
+        report_utils.log(f"Parsing {year} ...")
         block = parse_vintage(raw_dir, year, max_follow_up)
-        print(f"    {len(block):,} loans")
+        report_utils.log(f"Parsed {year}: {len(block):,} loans")
         parts.append(block)
 
     df = pd.concat(parts, ignore_index=True)
 
-    print(f"\ncleaning {len(df):,} loans")
+    report_utils.log(f"Cleaning {len(df):,} loans")
     df, report = clean(df, drop_missing_dti=drop_missing_dti)
     for line in report:
-        print(line)
+        report_utils.log(line.strip())
 
     if max_rows and len(df) > max_rows:
-        print(
-            f"\nsubsampling {len(df):,} -> {max_rows:,} "
+        report_utils.log(
+            f"Subsampling {len(df):,} -> {max_rows:,} "
             f"(stratified by year, seed {seed})"
         )
         df = subsample(df, max_rows, seed)
@@ -654,7 +673,7 @@ def prepare_cohort(
 
     describe(df)
     size_mb = out_file.stat().st_size / 1024 / 1024
-    print(f"\nwrote {out_file}  ({size_mb:.1f} MB)")
+    report_utils.log(f"Wrote {out_file} ({size_mb:.1f} MB)")
 
 
 # ----------------------------------------------------------------------------------------
@@ -736,8 +755,8 @@ def read_inputs(table: Path, folds_file: Path) -> tuple:
     df = pd.read_csv(table, dtype=as_text)
     df = df.sort_values([GROUP_COLUMN, ID_COLUMN]).reset_index(drop=True)
     spec = json.loads(folds_file.read_text())
-    print(f"Read {len(df):,} rows from {table}")
-    print(f"Read folds from {folds_file}")
+    report_utils.log(f"Read {len(df):,} rows from {table}")
+    report_utils.log(f"Read folds from {folds_file}")
 
     if len(df) != spec["n"]:
         sys.exit(
@@ -767,8 +786,8 @@ def read_inputs(table: Path, folds_file: Path) -> tuple:
         if unexpected:
             sys.exit(f"{col} holds undeclared level(s) {sorted(unexpected)}.")
     if recoded:
-        print(
-            "  not-available codes folded into the reference level: "
+        report_utils.log(
+            "Not-available codes folded into the reference level: "
             + ", ".join(
                 f"{c} {n} row(s) -> {CATEGORY_LEVELS[c][0]}" for c, n in recoded.items()
             )
@@ -851,7 +870,7 @@ def normalize_arm(
 ) -> list:
     folder = output_dir / cohort / arm
     folder.mkdir(parents=True, exist_ok=True)
-    print(f"\n--- {cohort} / {arm}: {len(folds)} folds, saved in {folder} ---")
+    report_utils.log(f"{cohort} / {arm}: {len(folds)} folds, saved in {folder}")
 
     scaled = [f"{c}_std" for c in COLUMNS_TO_SCALE]
     summary, all_params, dropped = [], [], set()
@@ -877,13 +896,15 @@ def normalize_arm(
             }
         )
         if notes["zero_variance"]:
-            print(
-                f"  fold {i}: no variance in the training rows for "
+            report_utils.log(
+                f"Fold {i}: no variance in the training rows for "
                 f"{notes['zero_variance']}, sd set to 1"
             )
-    print(pd.DataFrame(summary).to_string(index=False))
     if dropped:
-        print(f"  no column for {sorted(dropped)}: absent from the training rows")
+        report_utils.log(
+            f"No column for {sorted(dropped)}: absent from the training rows"
+        )
+    report_utils.table(pd.DataFrame(summary), decimals=3)
 
     per_fold = [
         tuple(sorted(col for c in CATEGORY_LEVELS for col in p["encode"][c]["columns"]))
@@ -901,14 +922,11 @@ def normalize_cohort(
     cohort: str, table: Path, folds_file: Path, output_dir: Path
 ) -> None:
     """Impute, scale and encode each fold with its own training rows and save it."""
-    print(f"Scaling  {COLUMNS_TO_SCALE}")
-    print(f"Encoding {list(CATEGORY_LEVELS)}")
-    print("with the statistics of the training rows of each fold only, then applying")
-    print("them to its test rows.\n")
-
-    print("=" * 92)
-    print(f"{cohort.upper()} COHORT")
-    print("=" * 92)
+    report_utils.log(
+        f"Scaling {COLUMNS_TO_SCALE} and encoding {list(CATEGORY_LEVELS)} with the "
+        "statistics of the training rows of each fold only, then applying them to "
+        "its test rows."
+    )
     df, spec = read_inputs(table, folds_file)
 
     params = {}
@@ -917,4 +935,4 @@ def normalize_cohort(
 
     params_file = output_dir / cohort / "scaling.json"
     params_file.write_text(json.dumps(params, indent=1))
-    print(f"\nSaved {params_file}\n")
+    report_utils.log(f"Saved {params_file}")

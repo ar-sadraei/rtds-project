@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from utils import fold_utils, medical_utils
+from utils import fold_utils, medical_utils, report_utils
 
 # ----------------------------------------------------------------------------------------
 # 1. Folders and settings (edit these)
@@ -43,7 +43,8 @@ SEED = 0
 
 
 def main() -> None:
-    print("=== Step 1: merge, clean and label ===")
+    report_utils.h1("MEDICAL: PREPARE")
+    report_utils.h2("Merge, clean and label")
     df = medical_utils.merge_and_clean(
         DEMOGRAPHY_DIR, SMOKING_DIR, MORTALITY_DIR, MIN_AGE_YEARS
     )
@@ -52,9 +53,9 @@ def main() -> None:
     df = medical_utils.add_labels(df, HORIZON_MONTHS)
     MERGED_FILE.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(MERGED_FILE, index=False)
-    print(f"\nSaved {MERGED_FILE.resolve()}")
+    report_utils.log(f"Saved {MERGED_FILE.resolve()}")
 
-    print("\n=== Step 2: folds ===")
+    report_utils.h2("Folds")
     fold_utils.make_folds(
         MERGED_FILE,
         medical_utils.GROUP_COLUMN,
@@ -65,7 +66,7 @@ def main() -> None:
         SEED,
     )
 
-    print("\n=== Step 3: recode and normalize inside each fold ===")
+    report_utils.h2("Recode and normalize inside each fold")
     medical_utils.normalize(MERGED_FILE, FOLDS_FILE, NORMALIZED_DIR)
 
 

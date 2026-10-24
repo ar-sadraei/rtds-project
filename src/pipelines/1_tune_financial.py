@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from utils import benchmark_utils
+from utils import benchmark_utils, report_utils
 
 # ----------------------------------------------------------------------------------------
 # 1. Folders and settings
@@ -32,9 +32,7 @@ BUDGET = 10
 
 def main() -> None:
     for cohort, n_folds in COHORTS:
-        print("=" * 92)
-        print(f"{cohort.upper()} COHORT")
-        print("=" * 92)
+        report_utils.h1(f"{cohort.upper()} COHORT: TUNING")
         benchmark_utils.tune(
             NORMALIZED_DIR / cohort,
             "temporal",

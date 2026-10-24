@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from . import report_utils
+
 # ----------------------------------------------------------------------------------------
 # 2. Columns to keep: original name -> new name. Everything else is dropped.
 # ----------------------------------------------------------------------------------------
@@ -127,9 +129,9 @@ def read_survey_folder(folder: Path, columns: dict) -> pd.DataFrame:
         if "SEQN" not in keep:
             sys.exit(f"{path.name} has no SEQN column, is it a real XPT data file?")
         if left_out:
-            print(f"  note: {path.name} has no {left_out}")
+            report_utils.log(f"Note: {path.name} has no {left_out}")
         parts.append(df[keep].rename(columns=columns))
-        print(f"  {folder.name}/{path.name}: {len(df):,} rows")
+        report_utils.log(f"{folder.name}/{path.name}: {len(df):,} rows")
     out = pd.concat(parts, ignore_index=True)
     out["participant_id"] = out["participant_id"].astype("int64")
     check_unique(out, folder)
@@ -152,7 +154,7 @@ def read_mortality_folder(folder: Path) -> pd.DataFrame:
         for c in names:
             df[c] = pd.to_numeric(df[c], errors="coerce")
         parts.append(df)
-        print(f"  {folder.name}/{path.name}: {len(df):,} rows")
+        report_utils.log(f"{folder.name}/{path.name}: {len(df):,} rows")
     out = pd.concat(parts, ignore_index=True)
 
     unusual = (
@@ -189,24 +191,24 @@ def whole_numbers_as_int(df: pd.DataFrame) -> pd.DataFrame:
 def merge_and_clean(
     demography_dir: Path, smoking_dir: Path, mortality_dir: Path, min_age_years: int
 ) -> pd.DataFrame:
-    print("Reading demography files")
+    report_utils.log("Reading demography files")
     demo = read_survey_folder(demography_dir, DEMOGRAPHY_COLUMNS)
-    print("Reading smoking files")
+    report_utils.log("Reading smoking files")
     smoke = read_survey_folder(smoking_dir, SMOKING_COLUMNS)
-    print("Reading mortality files")
+    report_utils.log("Reading mortality files")
     mort = read_mortality_folder(mortality_dir)
 
     # Demography is the base table
     df = demo.merge(mort, on="participant_id", how="left", validate="one_to_one")
     df = df.merge(smoke, on="participant_id", how="left", validate="one_to_one")
-    print(
-        f"\nMerged {len(demo):,} participants. "
+    report_utils.log(
+        f"Merged {len(demo):,} participants. "
         f"Without mortality record: {(~demo['participant_id'].isin(mort['participant_id'])).sum():,}. "
         f"Without smoking record: {(~demo['participant_id'].isin(smoke['participant_id'])).sum():,}."
     )
     lost = (~mort["participant_id"].isin(demo["participant_id"])).sum()
     if lost:
-        print(
+        report_utils.log(
             f"WARNING: {lost:,} mortality rows have no demography row and are not in the result."
         )
 
@@ -223,7 +225,7 @@ def merge_and_clean(
 
     n_before = len(df)
     df = df[df["age_years"] >= min_age_years].reset_index(drop=True)
-    print(
+    report_utils.log(
         f"Removed {n_before - len(df):,} participants under {min_age_years}, "
         f"{len(df):,} left."
     )
@@ -231,14 +233,14 @@ def merge_and_clean(
     # No mortality status: not linkable to death records
     n_before = len(df)
     df = df[df["mortality_status"].notna()].reset_index(drop=True)
-    print(
+    report_utils.log(
         f"Removed {n_before - len(df):,} participants without a mortality status, "
         f"{len(df):,} left."
     )
 
     n_before = len(df)
     df = df[df["smoked_100_cigarettes"].notna()].reset_index(drop=True)
-    print(
+    report_utils.log(
         f"Removed {n_before - len(df):,} participants without a "
         f"smoked_100_cigarettes answer, {len(df):,} left."
     )
@@ -248,7 +250,7 @@ def merge_and_clean(
     df = df[
         ~((df["smoked_100_cigarettes"] == 1) & df["smokes_now"].isna())
     ].reset_index(drop=True)
-    print(
+    report_utils.log(
         f"Removed {n_before - len(df):,} participants who smoked 100 cigarettes but have "
         f"no smokes_now answer, {len(df):,} left."
     )
@@ -258,7 +260,7 @@ def merge_and_clean(
     df = df[~((df["mortality_status"] == 1) & df["cause_of_death"].isna())].reset_index(
         drop=True
     )
-    print(
+    report_utils.log(
         f"Removed {n_before - len(df):,} participants who died without a cause of death, "
         f"{len(df):,} left."
     )
@@ -266,7 +268,7 @@ def merge_and_clean(
     # No follow-up time (no exam)
     n_before = len(df)
     df = df[df["followup_months"].notna()].reset_index(drop=True)
-    print(
+    report_utils.log(
         f"Removed {n_before - len(df):,} participants without a follow-up time, "
         f"{len(df):,} left."
     )
@@ -275,7 +277,7 @@ def merge_and_clean(
     n_before = len(df)
     unknown = df["smoked_100_cigarettes"].isin([7, 9]) | df["smokes_now"].isin([7, 9])
     df = df[~unknown].reset_index(drop=True)
-    print(
+    report_utils.log(
         f"Removed {n_before - len(df):,} participants who refused or did not know a "
         f"smoking answer, {len(df):,} left."
     )
@@ -288,7 +290,7 @@ def merge_and_clean(
 
     empty = [c for c in df.columns if df[c].isna().all()]
     if empty:
-        print(f"Dropping columns with no data at all: {empty}")
+        report_utils.log(f"Dropping columns with no data at all: {empty}")
         df = df.drop(columns=empty)
     return df
 
@@ -297,35 +299,43 @@ def merge_and_clean(
 # Preview
 # ----------------------------------------------------------------------------------------
 def show_preview(df: pd.DataFrame) -> None:
-    pd.set_option("display.max_columns", None)
-    pd.set_option("display.width", 200)
+    report_utils.log(f"Total entries: {len(df):,}")
 
-    print("\n=== Columns and value types ===")
-    print(df.dtypes.to_string())
-
-    print("\n=== 5 random rows ===")
-    print(df.sample(5))
-
-    print(f"\n=== Total entries: {len(df):,} ===")
-
-    print("\n=== Entries per cycle ===")
-    print(df["cycle"].value_counts().sort_index().to_string())
-
-    print("\n=== Missing values per column ===")
-    missing = df.isna().sum()
-    print(
-        pd.DataFrame(
-            {"missing": missing, "missing_%": (missing / len(df) * 100).round(1)}
-        ).to_string()
+    report_utils.h2("Columns and value types")
+    report_utils.table(
+        pd.DataFrame({"Column": df.columns, "Type": df.dtypes.astype(str).to_numpy()})
     )
 
-    print("\n=== Values of the coded columns ===")
+    report_utils.h2("5 random rows")
+    report_utils.table(df.sample(5), decimals=2)
+
+    report_utils.h2("Entries per cycle")
+    per_cycle = df["cycle"].value_counts().sort_index()
+    report_utils.table(
+        pd.DataFrame({"Cycle": per_cycle.index, "Rows": per_cycle.to_numpy()})
+    )
+
+    report_utils.h2("Missing values per column")
+    missing = df.isna().sum()
+    report_utils.table(
+        pd.DataFrame(
+            {
+                "Column": missing.index,
+                "Missing": missing.to_numpy(),
+                "Missing %": (missing / len(df) * 100).round(1).to_numpy(),
+            }
+        ),
+        decimals=1,
+    )
+
+    report_utils.h2("Values of the coded columns")
+    coded = []
     for col, labels in VALUE_LABELS.items():
         counts = df[col].value_counts().sort_index()
-        print(f"\n{col}")
         for code, n in zip(counts.index.to_list(), counts.to_list()):
             label = labels.get(code, "??? not in VALUE_LABELS")
-            print(f"  {code:>3}  {label:<36} {n:>7,}")
+            coded.append({"Column": col, "Code": code, "Meaning": label, "Rows": n})
+    report_utils.table(pd.DataFrame(coded))
 
 
 # ----------------------------------------------------------------------------------------
@@ -348,7 +358,7 @@ def keep_cycles(df: pd.DataFrame, max_cycle: str) -> pd.DataFrame:
     before = len(df)
     out = df[df[GROUP_COLUMN] <= max_cycle].reset_index(drop=True)
     dropped = sorted(set(df[GROUP_COLUMN]) - set(out[GROUP_COLUMN]))
-    print(
+    report_utils.log(
         f"Removed {before - len(out):,} participants from cycles after {max_cycle} "
         f"({', '.join(dropped) if dropped else 'none'}), {len(out):,} left."
     )
@@ -365,24 +375,30 @@ def add_labels(df: pd.DataFrame, horizon_months: int) -> pd.DataFrame:
     died_in_window = died & (df["followup_months"] <= horizon_months)
     out["time"] = df["followup_months"].clip(upper=horizon_months)
     out["event"] = cause.where(died_in_window, 0).astype(int)
-    print(
+    report_utils.log(
         f"time and event: follow-up cut at {horizon_months} months; "
         f"{(died & ~died_in_window).sum():,} deaths after that count as censored"
     )
-    print(
-        "event: 0 censored, 1 heart disease, 2 cancer, 3 all other causes\n"
-        + out["event"].value_counts().sort_index().to_string()
+    meaning = {0: "censored", 1: "heart disease", 2: "cancer", 3: "all other causes"}
+    counts = out["event"].value_counts().sort_index()
+    report_utils.table(
+        pd.DataFrame(
+            {
+                "Event": counts.index,
+                "Meaning": [meaning[c] for c in counts.index],
+                "Rows": counts.to_numpy(),
+            }
+        )
     )
     return out
 
 
 def recode(df: pd.DataFrame) -> pd.DataFrame:
     """Recode the columns for the models. Fixed rules only, nothing is learned."""
-    print("\n=== Recoding ===")
     out = df[["participant_id", "cycle"]].copy()
 
     out["sex_female"] = (df["sex"] == 2).astype(int)
-    print(
+    report_utils.log(
         f"sex: 1 male / 2 female -> sex_female 0/1 ({out['sex_female'].sum():,} female)"
     )
 
@@ -395,7 +411,7 @@ def recode(df: pd.DataFrame) -> pd.DataFrame:
     }
     for code, name in race_columns.items():
         out[name] = (df["race_ethnicity"] == code).astype(int)
-    print(
+    report_utils.log(
         "race_ethnicity: one-hot into "
         f"{', '.join(race_columns.values())} (reference: non-Hispanic white)"
     )
@@ -408,11 +424,14 @@ def recode(df: pd.DataFrame) -> pd.DataFrame:
     status[ever & (df["smokes_now"] == 1)] = "current_every_day"
     for name in ["former", "current_some_days", "current_every_day"]:
         out[f"smoking_{name}"] = (status == name).astype(int)
-    print(
+    report_utils.log(
         "smoked_100_cigarettes + smokes_now: combined into a smoking status, then one-hot "
         "(reference: never)"
     )
-    print(status.value_counts().to_string())
+    by_status = status.value_counts()
+    report_utils.table(
+        pd.DataFrame({"Smoking status": by_status.index, "Rows": by_status.to_numpy()})
+    )
 
     # Age is scaled later, inside each fold
     out["age_years"] = df["age_years"]
@@ -447,8 +466,8 @@ def read_inputs(table_file: Path, folds_file: Path) -> tuple:
     df = pd.read_csv(table_file)
     df = df.sort_values([GROUP_COLUMN, ID_COLUMN]).reset_index(drop=True)
     spec = json.loads(folds_file.read_text())
-    print(f"Read {len(df):,} rows from {table_file}")
-    print(f"Read folds from {folds_file}")
+    report_utils.log(f"Read {len(df):,} rows from {table_file}")
+    report_utils.log(f"Read folds from {folds_file}")
 
     # The folds are row positions, so they only fit the table they were made from
     if len(df) != spec["n"]:
@@ -480,7 +499,7 @@ def normalize_fold(df: pd.DataFrame, train_idx: list, test_idx: list) -> tuple:
 def normalize_arm(df: pd.DataFrame, folds: list, arm: str, output_dir: Path) -> list:
     folder = output_dir / arm
     folder.mkdir(parents=True, exist_ok=True)
-    print(f"\n--- {arm}: {len(folds)} folds, saved in {folder} ---")
+    report_utils.log(f"{arm}: {len(folds)} folds, saved in {folder}")
 
     summary, all_params = [], []
     for i, fold in enumerate(folds, start=1):
@@ -498,7 +517,7 @@ def normalize_arm(df: pd.DataFrame, folds: list, arm: str, output_dir: Path) -> 
             row[f"train_{new}_sd"] = round(train[new].std(), 3)
             row[f"test_{new}_mean"] = round(test[new].mean(), 3)
         summary.append(row)
-    print(pd.DataFrame(summary).to_string(index=False))
+    report_utils.table(pd.DataFrame(summary), decimals=3)
     return all_params
 
 
@@ -510,8 +529,10 @@ def normalize(table_file: Path, folds_file: Path, output_dir: Path) -> None:
     df, spec = read_inputs(table_file, folds_file)
     df = recode(df)
 
-    print(f"\nScaling {COLUMNS_TO_SCALE} with the mean and standard deviation of the")
-    print("training rows of each fold only, then applying them to its test rows.")
+    report_utils.log(
+        f"Scaling {COLUMNS_TO_SCALE} with the mean and standard deviation of the "
+        "training rows of each fold only, then applying them to its test rows."
+    )
 
     params = {}
     for arm in ("temporal", "random"):
@@ -520,4 +541,4 @@ def normalize(table_file: Path, folds_file: Path, output_dir: Path) -> None:
     # Keep the numbers used, so the same scaling can be applied again later
     params_file = output_dir / "scaling.json"
     params_file.write_text(json.dumps(params, indent=1))
-    print(f"\nSaved {params_file.resolve()}")
+    report_utils.log(f"Saved {params_file.resolve()}")
