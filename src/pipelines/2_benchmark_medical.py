@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 warnings.filterwarnings("ignore")
 
-from utils import benchmark_utils
+from utils import benchmark_utils, report_utils
 
 # ----------------------------------------------------------------------------------------
 # 1. Folders and settings
@@ -31,9 +31,7 @@ N_CAUSES = 3
 
 
 def main() -> None:
-    print("=" * 92)
-    print(f"MEDICAL, {N_FOLDS} folds per arm")
-    print("=" * 92)
+    report_utils.h1(f"MEDICAL: BENCHMARK, {N_FOLDS} FOLDS PER ARM")
     params = benchmark_utils.read_params(TUNING_DIR / "medical.json")
     benchmark_utils.run(
         "medical",

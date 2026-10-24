@@ -37,6 +37,8 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedShuffleSplit
 
+from . import report_utils
+
 
 def temporal_folds(groups: np.ndarray) -> list[tuple[np.ndarray, np.ndarray]]:
     """
@@ -119,27 +121,33 @@ def verify(
         if set(rt) & set(re_r):
             problems.append(f"random fold {i}: rows on both sides")
 
-    print(f"\n=== {name} ===")
-    print(
-        f"  {'fold':>4} {'train':>8} {'test':>7}  {'train groups':<28} {'test group':>10}"
-        f"  {'events in test':>16}"
-    )
+    rows = []
     for i, (tr, te) in enumerate(temporal, 1):
         tg = sorted(set(groups[tr]))
         shown = f"{tg[0]}-{tg[-1]}" if len(tg) > 1 else str(tg[0])
         ev = pd.Series(events[te]).value_counts().sort_index()
-        evs = " ".join(f"{k}:{v}" for k, v in ev.items())
-        print(
-            f"  {i:>4} {len(tr):>8,} {len(te):>7,}  {shown:<28} {groups[te][0]:>10}  {evs:>16}"
+        rows.append(
+            {
+                "Fold": i,
+                "Train": len(tr),
+                "Test": len(te),
+                "Train groups": shown,
+                "Test group": groups[te][0],
+                "Events in test": " ".join(f"{k}:{v}" for k, v in ev.items()),
+            }
         )
 
+    report_utils.log(f"Fold check for {name}")
     if problems:
-        print("  FAILED:")
+        report_utils.log("FAILED:")
         for p in problems:
-            print(f"    - {p}")
-        return False
-    print("  all checks passed: no group leakage, sizes matched, no row in both sides")
-    return True
+            report_utils.log(f"  {p}")
+    else:
+        report_utils.log(
+            "All checks passed: no group leakage, sizes matched, no row in both sides"
+        )
+    report_utils.table(pd.DataFrame(rows))
+    return not problems
 
 
 def build(
@@ -178,4 +186,4 @@ def make_folds(
 
     folds_file.parent.mkdir(parents=True, exist_ok=True)
     folds_file.write_text(json.dumps(spec))
-    print(f"\nwrote {folds_file}  ({len(spec['temporal'])} folds per arm)")
+    report_utils.log(f"Wrote {folds_file} ({len(spec['temporal'])} folds per arm)")

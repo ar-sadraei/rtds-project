@@ -9,17 +9,20 @@ rather than one column per metric keeps the per-cause and per-horizon structure 
 of column names, so the analysis is a groupby.
 """
 
+import warnings
+
 import numpy as np
 import pandas as pd
 
-# Draws used to average out the Aalen-Johansen tie-breaking jitter
-AJ_REPEATS = 5
 from hazardous.metrics import (
     aj_calibration,
     concordance_index_incidence,
     d_cr_calibration,
     integrated_brier_score_incidence,
 )
+
+# Draws used to average out the Aalen-Johansen tie-breaking jitter
+AJ_REPEATS = 5
 
 
 def as_frame(t, e):
@@ -84,7 +87,12 @@ def score(cif, t_train, e_train, t_test, e_test, times, n_causes):
     # the spread is kept as the noise floor: two models whose AJ-calibration differs
     # by less than it are not distinguishable, however the ranking happens to fall.
     try:
-        draws = [float(aj_calibration(y_te, times, packed)) for _ in range(AJ_REPEATS)]
+        # The tie warning is expected and handled by the repeats, so silence it
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Tied event times")
+            draws = [
+                float(aj_calibration(y_te, times, packed)) for _ in range(AJ_REPEATS)
+            ]
         add("aj_calibration", None, None, float(np.mean(draws)))
         add("aj_calibration_spread", None, None, float(max(draws) - min(draws)))
     except Exception:
