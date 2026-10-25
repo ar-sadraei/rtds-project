@@ -38,8 +38,9 @@ N_CAUSES = 3
 SEEDS = (0, 1, 2)
 
 
-def main() -> None:
-    report_utils.start_log(Path(__file__).stem)
+@report_utils.logged
+def benchmark_medical() -> None:
+    """Run every step of this process."""
     report_utils.h1("MEDICAL: BENCHMARK")
     params = benchmark_utils.read_params(TUNING_DIR / "medical.json")
     benchmark_utils.run(
@@ -56,4 +57,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    benchmark_medical()

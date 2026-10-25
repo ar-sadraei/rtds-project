@@ -16,6 +16,9 @@ Data Science, Stockholm University.
   and numbered in order: tune, then benchmark, then analyze.
 - A pipeline holds the folders and settings and chains calls to the utils. Keep the
   logic in the utils.
+- Each pipeline file defines one function named after its process, for example
+  `prepare_medical()`, marked with `@report_utils.logged`. `src/pipelines/__init__.py`
+  exports them, and `src/main.py` calls them in order.
 - The medical and the financial data follow the same steps and the same table
   contract: an id, a group column (`cycle` or `vintage`), `time`, `event` and the
   features. Only the prepare step is specific to a dataset.

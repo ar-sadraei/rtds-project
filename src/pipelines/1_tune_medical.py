@@ -27,12 +27,13 @@ GROUP_COLUMN = "cycle"
 # cardiovascular death, cancer death, other causes
 N_CAUSES = 3
 
-# Same cap for every model so none is tuned harder than another
+# Settings drawn at random for each deep model; the classical models try every setting
 BUDGET = 10
 
 
-def main() -> None:
-    report_utils.start_log(Path(__file__).stem)
+@report_utils.logged
+def tune_medical() -> None:
+    """Run every step of this process."""
     report_utils.h1("MEDICAL: TUNING")
     benchmark_utils.tune(
         FOLDS_FILE,
@@ -46,4 +47,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    tune_medical()

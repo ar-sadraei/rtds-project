@@ -41,8 +41,9 @@ N_CAUSES = 2
 SEEDS = (0, 1, 2)
 
 
-def main() -> None:
-    report_utils.start_log(Path(__file__).stem)
+@report_utils.logged
+def benchmark_financial() -> None:
+    """Run every step of this process."""
     for cohort in COHORTS:
         report_utils.h1(f"{cohort} cohort: benchmark")
         params = benchmark_utils.read_params(TUNING_DIR / f"{cohort}.json")
@@ -60,4 +61,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    benchmark_financial()
