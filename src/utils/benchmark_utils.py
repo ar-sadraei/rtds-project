@@ -14,7 +14,8 @@ TUNING
     Settings are chosen inside every fold, using that fold's training rows only. The
     validation rows are the latest training group (temporal) or a stratified 20
     percent hold-out (kfold, matched, and temporal fold 1). The criterion is the mean
-    integrated Brier score over the causes and every model gets the same budget.
+    integrated Brier score over the causes. The classical models try every setting
+    of their grid. The deep models draw a random sample of at most the same budget.
 
 RESUMABLE
     Both tune() and run() write after every cell and skip the cells already written,
@@ -94,8 +95,8 @@ def load_fold(folds_dir, arm, k, id_col, group_col):
 def sample_configs(space, budget, seed=0):
     """
     The settings to try. A dict is a grid of its lists and a list is the settings
-    themselves. At most budget are returned: all of them when there are no more than
-    that, otherwise a seeded random sample.
+    themselves. With no budget, all of them are returned. With a budget, at most that
+    many: all of them when there are no more, otherwise a seeded random sample.
     """
     if isinstance(space, dict):
         keys = list(space)
@@ -104,7 +105,7 @@ def sample_configs(space, budget, seed=0):
         ]
     else:
         grid = list(space)
-    if len(grid) <= budget:
+    if budget is None or len(grid) <= budget:
         return grid
     rng = np.random.default_rng(seed)
     return [grid[i] for i in sorted(rng.choice(len(grid), budget, replace=False))]
@@ -175,7 +176,10 @@ def tune(folds_file, folds_dir, id_col, group_col, n_causes, budget, out_file):
                 cell = best.setdefault(arm, {}).setdefault(str(k), {})
                 if name in cell:
                     continue
-                configs = sample_configs(SEARCH_SPACE[name], budget)
+                # Grid search for the classical models, random search for the deep ones
+                configs = sample_configs(
+                    SEARCH_SPACE[name], budget if name in SEEDED else None
+                )
                 scores = []
                 for i, params in enumerate(configs, 1):
                     step = f"[{i}/{len(configs)}]"

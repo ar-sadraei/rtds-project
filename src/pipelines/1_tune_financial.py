@@ -29,12 +29,13 @@ GROUP_COLUMN = "vintage"
 # default and payoff
 N_CAUSES = 2
 
-# Same cap for every model so none is tuned harder than another
+# Settings drawn at random for each deep model; the classical models try every setting
 BUDGET = 10
 
 
-def main() -> None:
-    report_utils.start_log(Path(__file__).stem)
+@report_utils.logged
+def tune_financial() -> None:
+    """Run every step of this process."""
     for cohort in COHORTS:
         report_utils.h1(f"{cohort.upper()} COHORT: TUNING")
         benchmark_utils.tune(
@@ -49,4 +50,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    tune_financial()

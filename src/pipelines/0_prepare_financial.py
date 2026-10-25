@@ -55,8 +55,9 @@ DROP_MISSING_DTI = False
 SEED = 0
 
 
-def main() -> None:
-    report_utils.start_log(Path(__file__).stem)
+@report_utils.logged
+def prepare_financial() -> None:
+    """Run every step of this process."""
     for cohort, cfg in COHORTS.items():
         report_utils.h1(f"{cohort} cohort: prepare")
         report_utils.h2("Read and clean")
@@ -94,4 +95,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    prepare_financial()

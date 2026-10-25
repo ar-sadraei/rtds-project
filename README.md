@@ -95,6 +95,10 @@ python src/pipelines/2_benchmark_financial.py
 python src/pipelines/3_analyze.py
 ```
 
+Or run all seven in this order with one command, `python src/main.py`. It calls
+`prepare_medical()`, `prepare_financial()`, `tune_medical()` and so on, and stops at
+the first one that fails. Remove a call in `main.py` to skip a step.
+
 The order matters: prepare, then tune, then benchmark, then analyze. Tuning,
 benchmark and the bootstrap in the analysis are slow. All three write after every
 cell and skip the cells already written, so an interrupted run continues. Delete the
@@ -517,9 +521,9 @@ only, never with the test group and never once for all folds. The validation row
 the latest training group in the temporal arm. For temporal fold 1 (one training
 group), the kfold arm and the matched arm they are a stratified 80/20 hold-out
 (stratified by event). Every model uses the same criterion, the mean integrated Brier
-score over the causes on the validation rows, and the same cap of `BUDGET = 10`
-settings. A grid with at most 10 combinations is searched fully, a larger one is
-sampled. The result is `data/<dataset>/4_tuning/<dataset>.json`, keyed by arm, fold
+score over the causes on the validation rows. The classical models (cs-RSF with 12
+combinations, Fine-Gray with 4) try every setting. DeepHit and DSM draw at most
+`BUDGET = 10` settings at random from their grids, with a fixed seed. The result is `data/<dataset>/4_tuning/<dataset>.json`, keyed by arm, fold
 and model.
 
 - cs-RSF: trees, leaf size and depth.
@@ -556,10 +560,21 @@ A metric that cannot be computed gets a row with an empty value and the reason i
 part of no question.
 
 **Analysis.** `3_analyze.py` bootstraps the test rows of each fold 500 times (the same
-rows for all models, deep seeds averaged first), then writes to `data/analysis/`:
+rows for all models, deep seeds averaged first), then writes to `data/analysis/`. One
+folder per context, numbered in run order. Every table is also printed.
+
+| Folder | Answers | Files |
+|---|---|---|
+| `0_bootstrap/` | (intermediate) | One `.npz` per dataset, arm and fold. Resumable, delete to redo. |
+| `1_overview/` | Context for everything | `headline.csv`, `headline_preview.csv`, `missing_values.csv` |
+| `2_main_question/` | Main question, H1 | `deep_vs_classical.csv`, `domain_labels.csv`, `domain_label_counts.csv` |
+| `3_sq1_later_data/` | Sub question 1, H2 | `h2_arm_difference.csv`, `h2_summary.csv` |
+| `4_sq2_ranking_vs_probability/` | Sub question 2, H3 | `ranking_cases.csv`, `ranking_agreement.csv` |
+| `5_supporting/` | Supporting only | `friedman.csv`, `cost.csv` |
 
 - `headline.csv`: mean over folds and seeds per dataset, arm, model, cause, horizon
-  and metric, with a t interval over the fold values.
+  and metric, with a t interval over the fold values. `headline_preview.csv` is the
+  short version, averaged over causes and horizons.
 - `deep_vs_classical.csv`: DeepHit and DSM against Fine-Gray and cs-RSF, four pairs.
   The advantage is signed so positive means the deep model is better, averaged over
   folds within each replicate, with a 95% percentile interval. A cell is "deep better"
@@ -572,8 +587,7 @@ rows for all models, deep seeds averaged first), then writes to `data/analysis/`
   its winner wins fewer than 70% of the replicates, and disagreement is reported among
   the stable cases.
 - `friedman.csv`: a secondary test within one dataset and arm, folds as blocks. It has
-  low power with 4 to 7 blocks.
-- `missing_values.csv`, `cost.csv` (diagnostic).
+  low power with 4 to 7 blocks. `cost.csv` is a diagnostic.
 
 ### Limitations of the evaluation
 

@@ -5,6 +5,7 @@ Shared console output: a two level title, a settings string and a table.
 Every pipeline prints progress as log lines while it works and a table at the end.
 """
 
+import functools
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -33,8 +34,14 @@ class _Tee:
         return getattr(self.stream, name)
 
 
+# The console streams and log file of the running pipeline, while one is logging
+_active = None
+
+
 def start_log(name: str) -> None:
     """Copy everything printed from now on, errors included, to a new file in logs/."""
+    global _active
+    stop_log()
     log_dir = Path("logs")
     log_dir.mkdir(parents=True, exist_ok=True)
     file = open(
@@ -42,8 +49,33 @@ def start_log(name: str) -> None:
         "w",
         encoding="utf-8",
     )
+    _active = (sys.stdout, sys.stderr, file)
     sys.stdout = _Tee(sys.stdout, file)
     sys.stderr = _Tee(sys.stderr, file)
+
+
+def stop_log() -> None:
+    """Stop copying and give the console streams back."""
+    global _active
+    if _active is None:
+        return
+    sys.stdout, sys.stderr, file = _active
+    file.close()
+    _active = None
+
+
+def logged(func):
+    """Log a pipeline function to logs/<its file name>_<date>_<time>.log."""
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        start_log(Path(sys.modules[func.__module__].__file__).stem)
+        try:
+            return func(*args, **kwargs)
+        finally:
+            stop_log()
+
+    return wrapper
 
 
 # True when the last printed line was empty, so no gap is printed twice
