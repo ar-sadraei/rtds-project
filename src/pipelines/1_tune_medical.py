@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """
+Choose the settings of every model inside every fold of every arm, with that fold's
+training rows only. Resumable: tuned cells are skipped.
+
 Run after the prepare pipeline:
     venv/bin/python src/pipelines/1_tune_medical.py
 """
@@ -14,10 +17,9 @@ from utils import benchmark_utils, report_utils
 # ----------------------------------------------------------------------------------------
 # 1. Folders and settings
 # ----------------------------------------------------------------------------------------
+FOLDS_FILE = Path("data/medical/2_folds/medical.json")
 NORMALIZED_DIR = Path("data/medical/3_normalized")
 TUNING_DIR = Path("data/medical/4_tuning")
-
-N_FOLDS = 7
 
 ID_COLUMN = "participant_id"
 GROUP_COLUMN = "cycle"
@@ -30,11 +32,11 @@ BUDGET = 10
 
 
 def main() -> None:
+    report_utils.start_log(Path(__file__).stem)
     report_utils.h1("MEDICAL: TUNING")
     benchmark_utils.tune(
+        FOLDS_FILE,
         NORMALIZED_DIR,
-        "temporal",
-        N_FOLDS,
         ID_COLUMN,
         GROUP_COLUMN,
         N_CAUSES,

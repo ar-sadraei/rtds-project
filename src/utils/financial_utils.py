@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from . import report_utils
+from . import fold_utils, report_utils
 
 # ----------------------------------------------------------------------------------------
 # 2. File layout and columns
@@ -81,39 +81,6 @@ NUMERIC_RULES = {
 # ones. Instead the row is kept, `dti` is left empty, and `dti_missing` records
 # it. See --drop-missing-dti to override.
 REQUIRED = ["fico", "ltv", "orig_upb", "orig_rate", "orig_term"]
-
-# Meaning of the coded columns, printed at the end of the run.
-CODE_LABELS = {
-    "first_time_buyer": {"Y": "yes", "N": "no", "9": "not available"},
-    "occupancy": {
-        "P": "owner occupied",
-        "S": "second home",
-        "I": "investment",
-        "9": "not available",
-    },
-    "channel": {
-        "R": "retail",
-        "B": "broker",
-        "C": "correspondent",
-        "T": "third party origination",
-        "9": "not available",
-    },
-    "loan_purpose": {
-        "P": "purchase",
-        "C": "cash-out refinance",
-        "N": "no cash-out refinance",
-        "9": "not available",
-    },
-    "property_type": {
-        "SF": "single family",
-        "CO": "condo",
-        "PU": "planned unit",
-        "MH": "manufactured housing",
-        "CP": "co-op",
-        "99": "not available",
-    },
-    "dti_missing": {0: "dti reported", 1: "dti not reported"},
-}
 
 # Column order in the output CSV.
 OUTPUT_COLS = [
@@ -277,7 +244,7 @@ def scan_performance(zf: zipfile.ZipFile, year: int) -> tuple[dict, int]:
     return loans, malformed
 
 
-def resolve_events(loans: dict, max_follow_up: int) -> pd.DataFrame:
+def resolve_events(loans: dict, follow_up_months: int) -> pd.DataFrame:
     """
     Turn each loan's observation record into a single (time, event) pair.
 
@@ -310,15 +277,15 @@ def resolve_events(loans: dict, max_follow_up: int) -> pd.DataFrame:
         # Administrative censoring: if the event falls beyond the window we
         # chose to observe, then as far as this dataset is concerned it had not
         # happened yet.
-        if max_follow_up > 0 and time > max_follow_up:
-            time, event = max_follow_up, 0
+        if follow_up_months > 0 and time > follow_up_months:
+            time, event = follow_up_months, 0
 
         rows.append((loan_id, time, event, int(r["zb_credit"])))
 
     return pd.DataFrame(rows, columns=["loan_id", "time", "event", "default_zb_alt"])
 
 
-def parse_vintage(raw_dir: Path, year: int, max_follow_up: int) -> pd.DataFrame:
+def parse_vintage(raw_dir: Path, year: int, follow_up_months: int) -> pd.DataFrame:
     """Build the one-row-per-loan table for a single origination year."""
     zip_path = raw_dir / f"sample_{year}.zip"
     if not zip_path.exists():
@@ -332,7 +299,7 @@ def parse_vintage(raw_dir: Path, year: int, max_follow_up: int) -> pd.DataFrame:
         orig = read_origination(zf, year)
         loans, malformed = scan_performance(zf, year)
 
-    events = resolve_events(loans, max_follow_up)
+    events = resolve_events(loans, follow_up_months)
 
     # inner join: a loan must appear in BOTH files to be usable.
     # validate="one_to_one" makes a duplicated loan_id an error rather than a
@@ -367,8 +334,10 @@ def clean(
         if rule["sentinel"]:
             n_sentinel = df[col].isin(rule["sentinel"]).sum()
             if n_sentinel:
+                code = ", ".join(sorted(rule["sentinel"]))
                 report.append(
-                    f"  {col:<13} {n_sentinel:>7,} sentinel values -> missing"
+                    f"  {col}: {n_sentinel:,} loans carry the code {code} "
+                    "(not available), set to missing"
                 )
             df[col] = df[col].where(~df[col].isin(rule["sentinel"]))
         df[col] = pd.to_numeric(df[col], errors="coerce")
@@ -378,8 +347,8 @@ def clean(
         outside = df[col].notna() & ~df[col].between(rule["lo"], rule["hi"])
         if outside.any():
             report.append(
-                f"  {col:<13} {outside.sum():>7,} outside [{rule['lo']}, "
-                f"{rule['hi']}] -> missing"
+                f"  {col}: {outside.sum():,} loans outside the valid range "
+                f"{rule['lo']} to {rule['hi']}, set to missing"
             )
             df.loc[outside, col] = pd.NA
 
@@ -390,8 +359,8 @@ def clean(
     n_dti = int(df["dti_missing"].sum())
     if n_dti:
         report.append(
-            f"  {'dti':<13} {n_dti:>7,} missing -> kept, flagged in dti_missing "
-            f"({n_dti/len(df):.1%} of rows)"
+            f"  dti: {n_dti:,} loans have no value ({n_dti/len(df):.1%}). "
+            "Kept, with a dti_missing flag"
         )
 
     required = list(REQUIRED) + (["dti"] if drop_missing_dti else [])
@@ -402,33 +371,30 @@ def clean(
         for col in required:
             n = df[col].isna().sum()
             if n:
-                report.append(f"  {col:<13} {n:>7,} missing (required)")
+                report.append(f"  {col}: {n:,} loans have no value")
         report.append(
-            f"  -> dropped {missing_required.sum():,} rows missing a required covariate"
+            f"  Dropped {missing_required.sum():,} loans missing a required value "
+            f"({', '.join(required)})"
         )
         df = df[~missing_required]
 
     # 5. structural checks on the outcome itself
     bad_time = df.time < 0
     if bad_time.any():
-        report.append(f"  -> dropped {bad_time.sum():,} rows with negative time")
+        report.append(f"  Dropped {bad_time.sum():,} loans with a negative time")
         df = df[~bad_time]
 
     bad_event = ~df.event.isin([0, 1, 2])
     if bad_event.any():
-        report.append(
-            f"  -> dropped {bad_event.sum():,} rows with an invalid event code"
-        )
+        report.append(f"  Dropped {bad_event.sum():,} loans with an invalid event code")
         df = df[~bad_event]
 
     n_dup = df.loan_id.duplicated().sum()
     if n_dup:
-        report.append(f"  -> dropped {n_dup:,} duplicate loan_id rows")
+        report.append(f"  Dropped {n_dup:,} duplicate loan ids")
         df = df[~df.loan_id.duplicated()]
 
-    report.append(
-        f"  kept {len(df):,} of {n_start:,} loans " f"({len(df)/n_start:.1%})"
-    )
+    report.append(f"  Kept {len(df):,} of {n_start:,} loans ({len(df)/n_start:.1%})")
     return df, report
 
 
@@ -473,98 +439,7 @@ def subsample(df: pd.DataFrame, max_rows: int, seed: int) -> pd.DataFrame:
     return out.sort_values(["vintage", "loan_id"]).reset_index(drop=True)
 
 
-def describe(df: pd.DataFrame) -> None:
-    """Print the summary you should read before handing this file to anyone."""
-    report_utils.h2(f"Final dataset: {len(df):,} loans")
-
-    names = {0: "censored", 1: "default", 2: "prepaid"}
-    counts = df.event.value_counts().reindex([0, 1, 2]).fillna(0).astype(int)
-    report_utils.log("Outcome distribution")
-    report_utils.table(
-        pd.DataFrame(
-            {
-                "Outcome": list(names.values()),
-                "Loans": [counts[c] for c in names],
-                "Share": [f"{counts[c] / len(df):.2%}" for c in names],
-            }
-        ),
-        right=("Share",),
-    )
-
-    report_utils.log("By origination year")
-    tab = pd.crosstab(df.vintage, df.event.map(names))
-    tab.columns.name = None
-    report_utils.table(tab.reset_index())
-
-    report_utils.log(
-        f"Follow-up time (months): median {df.time.median():.0f}, "
-        f"mean {df.time.mean():.1f}, max {df.time.max():.0f}"
-    )
-
-    report_utils.log("Numeric covariates")
-    num = [c for c in NUMERIC_RULES if c in df.columns]
-    stats = df[num].describe().T[["count", "mean", "std", "min", "max"]]
-    stats["count"] = stats["count"].astype(int)
-    report_utils.table(stats.rename_axis("Covariate").reset_index(), decimals=2)
-
-    # Coded columns: every level a column actually takes, with its count. This is
-    # what you scan to catch a sentinel that slipped through or a category that
-    # appears in one vintage and not another.
-    report_utils.log("Coded columns, observed values")
-    coded = [
-        c
-        for c in (
-            "first_time_buyer",
-            "occupancy",
-            "channel",
-            "loan_purpose",
-            "property_type",
-            "dti_missing",
-        )
-        if c in df.columns
-    ]
-    rows = []
-    for col in coded:
-        vc = df[col].value_counts(dropna=False)
-        for val, n in zip(vc.index.to_list(), vc.to_list()):
-            rows.append(
-                {
-                    "Column": col,
-                    "Value": "(missing)" if pd.isna(val) else str(val),
-                    "Meaning": CODE_LABELS.get(col, {}).get(val, ""),
-                    "Loans": n,
-                    "Share": f"{n / len(df):.1%}",
-                }
-            )
-    report_utils.table(pd.DataFrame(rows), right=("Share",))
-
-    if "state" in df.columns:
-        top = df.state.value_counts()
-        report_utils.log(
-            f"state: {top.index[0]} is the most common of "
-            f"{df.state.nunique()} states, {top.iloc[0]:,} loans "
-            f"({top.iloc[0] / len(df):.1%})"
-        )
-
-    n_missing = df.isna().sum()
-    n_missing = n_missing[n_missing > 0]
-    if len(n_missing):
-        report_utils.log("Remaining missing values (optional covariates only)")
-        report_utils.table(
-            pd.DataFrame(
-                {
-                    "Column": n_missing.index,
-                    "Missing": n_missing.to_numpy(),
-                    "Share": [f"{n / len(df):.1%}" for n in n_missing],
-                }
-            ),
-            right=("Share",),
-        )
-    else:
-        report_utils.log("No missing values remain")
-
-
-def validate(df: pd.DataFrame, max_follow_up: int, drop_missing_dti: bool) -> None:
+def validate(df: pd.DataFrame, follow_up_months: int, drop_missing_dti: bool) -> None:
     """
     Check the output against the things the rest of the project assumes.
 
@@ -588,10 +463,10 @@ def validate(df: pd.DataFrame, max_follow_up: int, drop_missing_dti: bool) -> No
         problems.append(f"{df.time.isna().sum():,} rows with missing time")
     if (df.time < 0).any():
         problems.append(f"{(df.time < 0).sum():,} rows with negative time")
-    if max_follow_up > 0 and (df.time > max_follow_up).any():
+    if follow_up_months > 0 and (df.time > follow_up_months).any():
         problems.append(
-            f"{(df.time > max_follow_up).sum():,} rows with time beyond the "
-            f"{max_follow_up}-month cut"
+            f"{(df.time > follow_up_months).sum():,} rows with time beyond the "
+            f"{follow_up_months}-month cut"
         )
 
     required = list(REQUIRED) + (["dti"] if drop_missing_dti else [])
@@ -624,34 +499,18 @@ def prepare_cohort(
     raw_dir: Path,
     years: list,
     max_rows: int,
-    max_follow_up: int,
+    follow_up_months: int,
     seed: int,
     drop_missing_dti: bool,
     out_file: Path,
 ) -> None:
     """Read the raw archives, clean them, subsample and save one CSV for the cohort."""
-    settings = {
-        "cohort": cohort,
-        "years": years,
-        "max rows": f"{max_rows:,}" if max_rows else "(all)",
-        "follow-up": f"{max_follow_up} months" if max_follow_up else "(full)",
-        "seed": seed,
-        "output": out_file,
-    }
-    report_utils.table(
-        pd.DataFrame(
-            {"Setting": list(settings), "Value": [str(v) for v in settings.values()]}
-        )
-    )
-
     parts = []
     for year in years:
-        report_utils.log(f"Parsing {year} ...")
-        block = parse_vintage(raw_dir, year, max_follow_up)
-        report_utils.log(f"Parsed {year}: {len(block):,} loans")
-        parts.append(block)
+        parts.append(parse_vintage(raw_dir, year, follow_up_months))
 
     df = pd.concat(parts, ignore_index=True)
+    report_utils.log(f"Parsed {len(parts)} vintages: {len(df):,} loans")
 
     report_utils.log(f"Cleaning {len(df):,} loans")
     df, report = clean(df, drop_missing_dti=drop_missing_dti)
@@ -666,14 +525,18 @@ def prepare_cohort(
         df = subsample(df, max_rows, seed)
 
     df = df[[c for c in OUTPUT_COLS if c in df.columns]]
-    validate(df, max_follow_up, drop_missing_dti)
+    validate(df, follow_up_months, drop_missing_dti)
 
     out_file.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out_file, index=False)
 
-    describe(df)
-    size_mb = out_file.stat().st_size / 1024 / 1024
-    report_utils.log(f"Wrote {out_file} ({size_mb:.1f} MB)")
+    counts = df.event.value_counts()
+    report_utils.log(
+        f"Final dataset: {len(df):,} loans, "
+        f"{counts.get(0, 0):,} censored, {counts.get(1, 0):,} default, "
+        f"{counts.get(2, 0):,} prepaid"
+    )
+    report_utils.log(f"Wrote {out_file}")
 
 
 # ----------------------------------------------------------------------------------------
@@ -755,8 +618,6 @@ def read_inputs(table: Path, folds_file: Path) -> tuple:
     df = pd.read_csv(table, dtype=as_text)
     df = df.sort_values([GROUP_COLUMN, ID_COLUMN]).reset_index(drop=True)
     spec = json.loads(folds_file.read_text())
-    report_utils.log(f"Read {len(df):,} rows from {table}")
-    report_utils.log(f"Read folds from {folds_file}")
 
     if len(df) != spec["n"]:
         sys.exit(
@@ -870,41 +731,19 @@ def normalize_arm(
 ) -> list:
     folder = output_dir / cohort / arm
     folder.mkdir(parents=True, exist_ok=True)
-    report_utils.log(f"{cohort} / {arm}: {len(folds)} folds, saved in {folder}")
 
-    scaled = [f"{c}_std" for c in COLUMNS_TO_SCALE]
-    summary, all_params, dropped = [], [], set()
+    all_params, dropped = [], set()
     for i, fold in enumerate(folds, start=1):
         train, test, params, notes = normalize_fold(df, fold["train"], fold["test"])
         train.to_csv(folder / f"fold_{i}_train.csv", index=False)
         test.to_csv(folder / f"fold_{i}_test.csv", index=False)
         all_params.append({"fold": i, **params})
         dropped |= set(notes["constant"])
-
-        summary.append(
-            {
-                "fold": i,
-                "n_train": len(train),
-                "n_test": len(test),
-                "n_cols": train.shape[1],
-                "train_mean": round(float(train[scaled].to_numpy().mean()), 4),
-                "train_sd": round(float(np.mean([train[c].std() for c in scaled])), 4),
-                "test_fico_mean": round(float(test["fico_std"].mean()), 3),
-                "test_cltv_mean": round(float(test["cltv_std"].mean()), 3),
-                "test_dti_mean": round(float(test["dti_std"].mean()), 3),
-                "imputed": notes["imputed"],
-            }
-        )
         if notes["zero_variance"]:
             report_utils.log(
                 f"Fold {i}: no variance in the training rows for "
                 f"{notes['zero_variance']}, sd set to 1"
             )
-    if dropped:
-        report_utils.log(
-            f"No column for {sorted(dropped)}: absent from the training rows"
-        )
-    report_utils.table(pd.DataFrame(summary), decimals=3)
 
     per_fold = [
         tuple(sorted(col for c in CATEGORY_LEVELS for col in p["encode"][c]["columns"]))
@@ -912,7 +751,7 @@ def normalize_arm(
     ]
     if len(set(per_fold)) > 1:
         sys.exit(f"  {cohort}/{arm}: the folds do not share one design matrix.")
-    return all_params
+    return all_params, dropped
 
 
 # ----------------------------------------------------------------------------------------
@@ -929,10 +768,18 @@ def normalize_cohort(
     )
     df, spec = read_inputs(table, folds_file)
 
-    params = {}
-    for arm in ("temporal", "random"):
-        params[arm] = normalize_arm(df, spec[arm], cohort, arm, output_dir)
+    params, dropped = {}, set()
+    for arm in fold_utils.ARMS:
+        params[arm], absent = normalize_arm(df, spec[arm], cohort, arm, output_dir)
+        dropped |= absent
+    if dropped:
+        report_utils.log(
+            f"No column for {', '.join(sorted(dropped))}: no loan in the training "
+            "rows has this category, so there is nothing to encode"
+        )
 
     params_file = output_dir / cohort / "scaling.json"
     params_file.write_text(json.dumps(params, indent=1))
-    report_utils.log(f"Saved {params_file}")
+    report_utils.log(
+        f"Saved {output_dir / cohort} (scaling.json holds the statistics used)"
+    )

@@ -8,7 +8,7 @@ Ali Emre Nebiler, Amirreza Sadraei, Filip Becic.
 The project compares deep and classical survival models on two real datasets where
 more than one thing can happen to a subject:
 
-- **Medical:** adults from the US health survey NHANES (1999 to 2018), followed to
+- **Medical:** adults from the US health survey NHANES (1999 to 2014), followed to
   their death. The cause of death is the event: heart disease, cancer, or any other
   cause.
 - **Financial:** US mortgages from the Freddie Mac loan-level data. A loan ends in
@@ -19,10 +19,28 @@ happen. Every person or loan gets a `time` (when something happened or when we
 stopped watching) and an `event` (`0` means censored, so nothing was observed yet,
 and `1`, `2`, ... mean which event happened).
 
-What is in the repository today is the data side: pipelines that turn the raw files
-into clean tables, build the train and test folds, and normalize inside each fold.
-The model code (Deep Survival Machines and Neural Fine-Gray) is vendored in
-`vendor/`. The tune, benchmark and analyze pipelines are not written yet.
+The pipelines turn the raw files into clean tables, build the train and test folds,
+normalize inside each fold, tune and fit four models (the classical Fine-Gray and
+cs-RSF, the deep DeepHit and DSM), score them, and compare deep with classical.
+Deep Survival Machines and Neural Fine-Gray are vendored in `vendor/`.
+
+**The questions.**
+
+- Main question: under what conditions do deep models outperform classical models?
+  Answered on the `kfold` arm.
+- Sub question 1: on later data, do deep models give more accurate and better
+  calibrated probabilities? Answered on the `temporal` arm.
+- Sub question 2: do models that rank well also give well calibrated and accurate
+  probabilities?
+
+**The hypotheses.**
+
+- H1: the deep versus classical comparison does not vary with metric, time period or
+  domain.
+- H2: the deep advantage on later data is not smaller than on a standard split. This
+  needs the `matched` arm.
+- H3: the model rankings by discrimination and by probability accuracy and
+  calibration agree.
 
 ## Quick start
 
@@ -70,15 +88,31 @@ changed.
 ```bash
 python src/pipelines/0_prepare_medical.py
 python src/pipelines/0_prepare_financial.py
+python src/pipelines/1_tune_medical.py
+python src/pipelines/1_tune_financial.py
+python src/pipelines/2_benchmark_medical.py
+python src/pipelines/2_benchmark_financial.py
+python src/pipelines/3_analyze.py
 ```
+
+The order matters: prepare, then tune, then benchmark, then analyze. Tuning,
+benchmark and the bootstrap in the analysis are slow. All three write after every
+cell and skip the cells already written, so an interrupted run continues. Delete the
+file to start a cell again. Rebuild everything downstream when the folds change.
 
 Each command runs all of its steps and prints what it did and how many rows each
 cleaning step removed. Read that output rather than trusting the files. The financial
 pipeline builds both cohorts (calm and crisis) in one run.
 
+Every run of a pipeline also copies what it prints, errors included, to a new file
+`logs/<pipeline name>_<date>_<time>.log` (for example
+`logs/0_prepare_medical_2026-10-25_14-30-05.log`), live as it runs. The folder is not
+tracked by git.
+
 The pipelines take no command line arguments. Folders and settings are constants at
-the top of each pipeline file: the origination years and row cap of each cohort, the
-72-month cut, the seed and whether to drop loans with no DTI. Edit them there.
+the top of each pipeline file: the origination years (financial) or survey cycles
+(medical) of each cohort, the row cap, the 72-month cut, the seed and whether to
+drop loans with no DTI. Edit them there.
 
 The financial zip files stay zipped. The pipeline reads them directly, so do not
 unzip them.
@@ -91,20 +125,28 @@ src/
     medical_utils.py          read NHANES, clean, label, recode, normalize
     financial_utils.py        read Freddie Mac, clean, subsample, normalize
     fold_utils.py             build and check the folds, shared by both datasets
+    model_utils.py            the four models behind one interface, search space
+    metric_utils.py           Brier, scaled Brier, concordance, calibration gap, Aalen-Johansen
+    benchmark_utils.py        per-fold tuning and the benchmark loop
+    bootstrap_utils.py        paired bootstrap of the test rows, saved per fold
+    analysis_utils.py         the comparison tables
+    report_utils.py           titles, log lines and tables for the console
   pipelines/                  runnable scripts, one per process and domain
-    0_prepare_medical.py
-    0_prepare_financial.py
+    0_prepare_medical.py      0_prepare_financial.py
+    1_tune_medical.py         1_tune_financial.py
+    2_benchmark_medical.py    2_benchmark_financial.py
+    3_analyze.py
 data/                         not in git
-  medical/    0_raw  1_merged  2_folds  3_normalized
-  financial/  0_raw  1_merged  2_folds  3_normalized
+  medical/    0_raw  1_merged  2_folds  3_normalized  4_tuning  5_benchmark
+  financial/  0_raw  1_merged  2_folds  3_normalized  4_tuning  5_benchmark
+  analysis/
 vendor/                       other people's model code
 AGENTS.md                     rules for people and agents working in the repo
 ```
 
 Functions live in `src/utils/`. A pipeline only holds the folders and settings and
-chains the steps. Pipelines are numbered in run order. The later processes (tune,
-benchmark, analyze) will be separate pipelines in the same folder, split by domain
-and numbered in order.
+chains the steps. Pipelines are numbered in run order, and split by domain except the
+analysis, which compares the datasets side by side but never pools them.
 
 **The prepare pipelines.** Each one runs its stages in order, and every stage writes
 to disk so the next one reads a file.
@@ -117,18 +159,28 @@ to disk so the next one reads a file.
 | 3 recode and normalize | `data/medical/3_normalized/{arm}/` | `data/financial/3_normalized/{cohort}/{arm}/` |
 
 **Folds.** They are built once and saved as row positions, so every model sees
-identical splits and comparisons between models are paired. There are two arms:
+identical splits and comparisons between models are paired. There are three arms:
 
+- **kfold:** a stratified 5-fold split, shuffled and seeded, with strata of group
+  times event. If any stratum has fewer than 5 rows it falls back to event-only
+  strata and prints that. It answers the main question.
 - **temporal:** an expanding window on the group (survey cycle or origination year).
   Fold `k` trains on every group before group `k` and tests on group `k`. With `G`
-  groups there are `G - 1` folds.
-- **random:** a stratified random split matched to its temporal partner on both
-  training size and test size, so the difference between the arms comes from the
-  split rule and not from the amount of training data.
+  groups there are `G - 1` folds. It answers sub question 1.
+- **matched:** a stratified random split matched to its temporal partner on both
+  training size and test size, so the difference between the two arms comes from the
+  split rule and not from the amount of training data. It is used only for H2.
 
-The medical data has 9 folds per arm, the calm financial cohort 5 and the crisis
-cohort 4. The folds are checked for leaks before they are saved: no group on both
-sides, no row on both sides, and matched sizes.
+| dataset | kfold | temporal | matched |
+|---|---|---|---|
+| medical (8 cycles, 1999 to 2014) | 5 | 7 | 7 |
+| financial, calm | 5 | 5 | 5 |
+| financial, crisis | 5 | 4 | 4 |
+
+The number of folds differs per arm, so the tune and benchmark pipelines read it from
+the folds JSON. The folds are checked before they are saved: no group on both sides
+in the temporal arm, no row on both sides, matched sizes for temporal and matched, and
+kfold test sets that are disjoint and cover every row once.
 
 **Normalization.** Each fold is written as `fold_N_train.csv` and `fold_N_test.csv`.
 Every statistic (the scaling, the imputation, the category lists) comes from the
@@ -150,12 +202,12 @@ so they stay local.
 
 | | medical | financial |
 |---|---|---|
-| source | NHANES 1999 to 2018 with NCHS linked mortality (2019) | Freddie Mac Single-Family Loan-Level Dataset |
+| source | NHANES 1999 to 2014 with NCHS linked mortality (2019) | Freddie Mac Single-Family Loan-Level Dataset |
 | unit | a person | a loan |
-| size | 52,235 people | two cohorts of 55,000 loans |
+| size | 41,555 people | two cohorts of 55,000 loans |
 | events | `1` heart disease, `2` cancer, `3` other cause | `1` default, `2` prepaid |
 | `time` | months from the exam | loan age in months |
-| group for the time-ordered split | survey cycle (10 cycles) | origination year |
+| group for the time-ordered split | survey cycle (8 cycles) | origination year |
 
 Links:
 
@@ -195,6 +247,7 @@ and stops if a participant id appears twice.
 | died without a cause of death | 2 | 54,933 |
 | no follow-up time | 2,653 | 52,280 |
 | refused or "don't know" in a smoking question | 45 | 52,235 |
+| interviewed in 2015 to 2018 (cannot reach 72 months, see "Follow-up window") | 10,680 | 41,555 |
 
 Why these:
 
@@ -213,7 +266,7 @@ Why these:
 **Event.** `event` is `0` for censored, `1` for heart disease (NCHS cause 1), `2` for
 cancer (cause 2) and `3` for all other causes (causes 3 to 10, including stroke).
 Follow-up is cut at 72 months, so a death after that counts as censored. After the cut
-there are 48,342 censored, 1,033 heart disease, 923 cancer and 1,937 other.
+there are 38,040 censored, 942 heart disease, 829 cancer and 1,744 other.
 
 **Table for the models** (the files in `data/medical/3_normalized/`): `participant_id`,
 `cycle`, `sex_female`, `race_mexican_american`, `race_other_hispanic`, `race_black`,
@@ -237,9 +290,11 @@ training rows of each fold.
    values 001 (heart disease), 002 (cancer) and 010 ("All other causes (residual)") are
    available, so stroke cannot be told apart there. Putting it in "other" everywhere
    keeps the meaning of each event the same in all cycles.
-4. The **later cycles are mostly censored** at 72 months and have few events. See
-   "Follow-up window" below.
-5. Only **four features**: age, sex, race and ethnicity, and smoking.
+4. The **2015 to 2018 cycles are dropped**, because mortality is linked only through
+   2019 and nobody in them can be followed for 72 months. The last cycle kept (2013
+   to 2014) is still 43% censored before month 72. See "Follow-up window" below.
+5. Only **four features**: age, sex, race and ethnicity, and smoking. Differences
+   between models are small when the features carry little signal.
 6. NHANES is a complex survey. **Survey weights are not used**, so results are not
    population estimates.
 
@@ -300,11 +355,11 @@ split on the crisis cohort therefore tests on an easier population. That is the
 opposite of the usual intuition and is not a bug.
 
 Both cohorts use 55,000 loans, a 72-month window and seed 0, and draw an equal number
-of loans from each origination year so no year dominates. The cleaning report and a
-per-column value summary are printed before the file is written. The value summary is
-what catches a category that exists in one cohort and not the other: channel `T`
-(third-party origination) appears in the early years and is absent from 2013 onward,
-which matters when the feature is encoded.
+of loans from each origination year so no year dominates. The cleaning report is
+printed before the file is written. A category can exist in one cohort and not the
+other: channel `T` (third-party origination) appears in the early years and is absent
+from 2013 onward, and the normalize step says so when it drops that column. This
+matters when the feature is encoded.
 
 **Columns** of the CSV in `data/financial/1_merged/`:
 
@@ -415,11 +470,10 @@ the rest:
 
 Every person and every loan is **censored at 72 months**: anything that had not
 happened by month 72 is recorded as censored at 72. This is ordinary administrative
-censoring, set by `HORIZON_MONTHS` (medical) and `MAX_FOLLOW_UP` (financial). Without
+censoring, set by `FOLLOW_UP_MONTHS` (in both prepare pipelines). Without
 a common cut, `time` would mean something different for each group, because a 2013
 loan has been observed far longer than a 2018 one and a 1999 survey participant far
-longer than one from 2017. Set `MAX_FOLLOW_UP` to `0` in the financial pipeline to
-keep full follow-up.
+longer than one from 2017. Set `FOLLOW_UP_MONTHS` to `0` to keep full follow-up.
 
 **Why 72.** Three reasons, none of which is "it is a round number":
 
@@ -435,10 +489,10 @@ keep full follow-up.
    the results directly comparable.
 
 **Medical data.** The 72-month cut moves 4,402 deaths after month 72 to censored.
-Within 72 months there are 1,033 heart disease, 923 cancer and 1,937 other deaths. At
-60 months there would be 874, 769 and 1,582, so 72 gives about 20% more events per
-cause. The cost is that the later cycles cannot be followed for 72 months.
-Share of people in each cycle who died or were followed for at least the horizon:
+Within 72 months there are 942 heart disease, 829 cancer and 1,744 other deaths. At 60
+months there would be 783, 675 and 1,389, so 72 gives about 20% more events per cause.
+The cost is that the later cycles cannot be followed for 72 months. Share of people in
+each cycle who died or were followed for at least the horizon:
 
 | cycle | 60 months | 72 months |
 |---|---|---|
@@ -447,11 +501,94 @@ Share of people in each cycle who died or were followed for at least the horizon
 | 2015 to 2016 | 6% | 5% |
 | 2017 to 2018 | 2% | 2% |
 
-So in 2013 to 2014, 43% of people are censored before month 72, and in 2015 to 2018
-nearly everyone is. The models treat this as censoring, but the last test folds rest
-more on the censoring estimate, and the 2017 to 2018 fold has only about 30 heart
-disease and 30 cancer events. Read their 72-month metrics with care and also look at
-shorter horizons (24 and 48 months).
+Nobody in 2015 to 2018 can be observed at month 72. Their censoring distribution is
+zero at that horizon, so every inverse-probability-of-censoring weight is undefined,
+and in the kfold and matched arms they would mix with the older cycles and confound
+the arm comparison with how long people were observed. Those two cycles are therefore removed
+(the `cycles` list in `0_prepare_medical.py`). In the last cycle kept, 43% of people are
+censored before month 72, so the last temporal fold rests more on the censoring
+estimate. Read its 72-month metrics with care. The bootstrap and sub question 2 use
+the horizons 12, 36 and 60 months for this reason.
+
+### Evaluation design
+
+**Tuning.** Settings are chosen inside every fold, with that fold's training rows
+only, never with the test group and never once for all folds. The validation rows are
+the latest training group in the temporal arm. For temporal fold 1 (one training
+group), the kfold arm and the matched arm they are a stratified 80/20 hold-out
+(stratified by event). Every model uses the same criterion, the mean integrated Brier
+score over the causes on the validation rows, and the same cap of `BUDGET = 10`
+settings. A grid with at most 10 combinations is searched fully, a larger one is
+sampled. The result is `data/<dataset>/4_tuning/<dataset>.json`, keyed by arm, fold
+and model.
+
+- cs-RSF: trees, leaf size and depth.
+- Fine-Gray: `comprisk` has a penalized variant, so the grid is no penalty, ridge,
+  lasso and elastic net. The penalty strength is chosen by BIC along the path.
+- DeepHit and DSM: network size, dropout, learning rate and so on. There is no epochs
+  setting. DeepHit holds out 15% of the training rows and stops after 10 epochs
+  without improvement (at most 100 epochs, best weights restored). DSM holds out 15%
+  itself, stops after 3 epochs without improvement and restores the best weights, and
+  `iters` is set to 1000 so that this built-in stopping decides.
+
+**Seeds.** DeepHit and DSM run with three seeds (0, 1, 2). The seed changes the
+initialization only. The folds and the early-stopping validation rows never change
+with the seed. The classical models run once. The benchmark has a `seed` column.
+
+**Horizons.** The grid is 12, 24, 36, 48, 60 and 72 months. The bootstrap and sub
+question 2 use 12, 36 and 60 only (1, 3 and 5 years).
+
+**Metrics.** Per cause and horizon: Brier score, scaled Brier score (1 minus the model
+Brier over the Brier of the no-covariate Aalen-Johansen baseline), concordance and
+the calibration gap. The calibration gap bins the predicted cumulative incidence at the
+horizon into 5 quantile bins, takes the observed cumulative incidence in each bin from
+the Aalen-Johansen estimator and reports the weighted mean absolute difference. The
+bins are saved as `5_benchmark/calibration_bins.csv`, which are the calibration curves.
+Per cause: the integrated Brier score. Across causes: `aj_calibration` (hazardous,
+averaged over 5 draws because it breaks tied times by random jitter, with the spread
+kept), `cr_d_calibration`, and the share of predictions whose incidences sum above
+one. The Aalen-Johansen estimator behind the baseline and the calibration gap is our
+own and handles tied times exactly. It was checked against a simulated dataset with
+known cumulative incidences. Our concordance gives the same numbers as hazardous.
+A metric that cannot be computed gets a row with an empty value and the reason in the
+`error` column. The test predictions of every fit are saved under
+`5_benchmark/predictions/`. Fit and predict seconds are logged as diagnostics and are
+part of no question.
+
+**Analysis.** `3_analyze.py` bootstraps the test rows of each fold 500 times (the same
+rows for all models, deep seeds averaged first), then writes to `data/analysis/`:
+
+- `headline.csv`: mean over folds and seeds per dataset, arm, model, cause, horizon
+  and metric, with a t interval over the fold values.
+- `deep_vs_classical.csv`: DeepHit and DSM against Fine-Gray and cs-RSF, four pairs.
+  The advantage is signed so positive means the deep model is better, averaged over
+  folds within each replicate, with a 95% percentile interval. A cell is "deep better"
+  or "classical better" when the interval excludes zero. `domain_labels.csv` gives a
+  domain a label only when at least `MIN_PAIRS = 3` of the 4 pairs agree.
+- `h2_arm_difference.csv`: the advantage on the temporal arm minus the advantage on the
+  matched arm, with independent resamples for the two arms.
+- `ranking_cases.csv`, `ranking_agreement.csv`: for each fold, cause and horizon, the
+  best model by concordance and the best by calibration gap. A case is unstable when
+  its winner wins fewer than 70% of the replicates, and disagreement is reported among
+  the stable cases.
+- `friedman.csv`: a secondary test within one dataset and arm, folds as blocks. It has
+  low power with 4 to 7 blocks.
+- `missing_values.csv`, `cost.csv` (diagnostic).
+
+### Limitations of the evaluation
+
+1. **Temporal look-ahead.** The temporal folds split on the start of the test group,
+   but a training label uses follow-up up to 72 months, which can run past that start.
+   Training labels therefore contain information from the test period. It is strongest
+   in the crisis cohort, where the follow-up of early loans runs into the crisis. This
+   is documented and not corrected.
+2. **Few folds.** There are 4 to 7 folds per arm, so fold-level tests have low power
+   and the intervals come from resampling test rows, not from the folds.
+3. **Overlapping test sets in the matched arm.** Each matched fold is an independent
+   random sample, so its test set overlaps the test sets of the other folds. The folds
+   are not independent.
+4. **Four medical features.** Age, sex, race and smoking carry limited signal, so the
+   medical models may differ little.
 
 ### Missing values and leakage
 

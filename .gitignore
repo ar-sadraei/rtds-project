@@ -40,6 +40,10 @@ notebooks/
 # `git add -f results/<file>`.
 results/
 
+# ---- pipeline logs ---------------------------------------------------
+# Written live by report_utils.start_log, one file per run.
+logs/
+
 # ---- local notes -----------------------------------------------------
 DRAFT_TODO.md
 

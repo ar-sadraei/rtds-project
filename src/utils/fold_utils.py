@@ -5,12 +5,14 @@ Every model in the benchmark must see exactly the same splits, or comparisons
 between models are not paired and the bootstrap is invalid. So folds are built
 here, written to disk, and read by the runner. Nothing downstream re-splits.
 
-TWO ARMS
+THREE ARMS
+    kfold      stratified 5-fold on group x event. Answers the main question.
     temporal   expanding window on GROUP boundaries (origination vintage, or
                NHANES survey cycle). Train on all earlier groups, test on the
                next one.
-    random     a stratified random split matched to its temporal partner on
-               BOTH training-set size and test-set size.
+    matched    a stratified random split matched to its temporal partner on
+               BOTH training-set size and test-set size. Used only to compare
+               with the temporal arm.
 
 WHY NOT sklearn's TimeSeriesSplit
     It splits on row count, not on group. On our calm cohort (55,000 loans over
@@ -35,9 +37,15 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
 
 from . import report_utils
+
+ARMS = ("kfold", "temporal", "matched")
+
+# Folds and smallest stratum allowed for the kfold arm
+KFOLD_SPLITS = 5
+MIN_STRATUM = 5
 
 
 def temporal_folds(groups: np.ndarray) -> list[tuple[np.ndarray, np.ndarray]]:
@@ -84,8 +92,34 @@ def matched_random_folds(
     return out
 
 
+def kfold_folds(
+    groups: np.ndarray, events: np.ndarray, seed: int = 0
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    """
+    Stratified k-fold on group x event, shuffled and seeded.
+
+    If any stratum has fewer than MIN_STRATUM rows the strata fall back to the
+    event alone, which is printed.
+    """
+    strata = pd.Series(groups).astype(str) + "_" + pd.Series(events).astype(str)
+    smallest = int(strata.value_counts().min())
+    if smallest < MIN_STRATUM:
+        report_utils.log(
+            f"kfold: the smallest group x event stratum has {smallest} rows, "
+            f"fewer than {MIN_STRATUM}. Falling back to event-only strata."
+        )
+        strata = pd.Series(events).astype(str)
+    skf = StratifiedKFold(n_splits=KFOLD_SPLITS, shuffle=True, random_state=seed)
+    return [(tr, te) for tr, te in skf.split(np.zeros(len(groups)), strata)]
+
+
 def verify(
-    name: str, groups: np.ndarray, events: np.ndarray, temporal: list, random_: list
+    name: str,
+    groups: np.ndarray,
+    events: np.ndarray,
+    temporal: list,
+    matched: list,
+    kfold: list,
 ) -> bool:
     """
     Check the folds before any model is fitted.
@@ -111,7 +145,7 @@ def verify(
                 f"temporal fold {i}: trains on a group at or after the test group"
             )
 
-    for i, ((tt, te_t), (rt, re_r)) in enumerate(zip(temporal, random_), 1):
+    for i, ((tt, te_t), (rt, re_r)) in enumerate(zip(temporal, matched), 1):
         if len(tt) != len(rt):
             problems.append(f"pair {i}: train sizes differ, {len(tt):,} vs {len(rt):,}")
         if len(te_t) != len(re_r):
@@ -119,34 +153,26 @@ def verify(
                 f"pair {i}: test sizes differ, {len(te_t):,} vs {len(re_r):,}"
             )
         if set(rt) & set(re_r):
-            problems.append(f"random fold {i}: rows on both sides")
+            problems.append(f"matched fold {i}: rows on both sides")
 
-    rows = []
-    for i, (tr, te) in enumerate(temporal, 1):
-        tg = sorted(set(groups[tr]))
-        shown = f"{tg[0]}-{tg[-1]}" if len(tg) > 1 else str(tg[0])
-        ev = pd.Series(events[te]).value_counts().sort_index()
-        rows.append(
-            {
-                "Fold": i,
-                "Train": len(tr),
-                "Test": len(te),
-                "Train groups": shown,
-                "Test group": groups[te][0],
-                "Events in test": " ".join(f"{k}:{v}" for k, v in ev.items()),
-            }
-        )
+    n = len(groups)
+    covered = np.concatenate([te for _, te in kfold])
+    if len(covered) != n or len(np.unique(covered)) != n:
+        problems.append("kfold: the test sets are not disjoint or miss some rows")
+    for i, (tr, te) in enumerate(kfold, 1):
+        if set(tr) & set(te):
+            problems.append(f"kfold fold {i}: rows on both sides")
+        if len(tr) + len(te) != n:
+            problems.append(f"kfold fold {i}: train and test do not cover every row")
 
-    report_utils.log(f"Fold check for {name}")
     if problems:
-        report_utils.log("FAILED:")
+        report_utils.log("Fold check FAILED:")
         for p in problems:
             report_utils.log(f"  {p}")
     else:
         report_utils.log(
-            "All checks passed: no group leakage, sizes matched, no row in both sides"
+            "Fold check passed: no group leakage, sizes matched, no row in both sides"
         )
-    report_utils.table(pd.DataFrame(rows))
     return not problems
 
 
@@ -156,16 +182,18 @@ def build(
     g = df[group_col].to_numpy()
     e = df[event_col].to_numpy()
     tf = temporal_folds(g)
-    rf = matched_random_folds(g, e, tf, seed)
-    if not verify(name, g, e, tf, rf):
+    mf = matched_random_folds(g, e, tf, seed)
+    kf = kfold_folds(g, e, seed)
+    if not verify(name, g, e, tf, mf, kf):
         return None
     return {
         "name": name,
         "group_col": group_col,
         "seed": seed,
         "n": len(df),
+        "kfold": [{"train": t.tolist(), "test": s.tolist()} for t, s in kf],
         "temporal": [{"train": t.tolist(), "test": s.tolist()} for t, s in tf],
-        "random": [{"train": t.tolist(), "test": s.tolist()} for t, s in rf],
+        "matched": [{"train": t.tolist(), "test": s.tolist()} for t, s in mf],
     }
 
 
@@ -186,4 +214,53 @@ def make_folds(
 
     folds_file.parent.mkdir(parents=True, exist_ok=True)
     folds_file.write_text(json.dumps(spec))
-    report_utils.log(f"Wrote {folds_file} ({len(spec['temporal'])} folds per arm)")
+    report_utils.log(f"Saved {folds_file}")
+
+
+def show_folds(table_file: Path, id_col: str, event_col: str, folds_file: Path) -> None:
+    """Print the size of every arm and the temporal folds from the saved folds."""
+    spec = json.loads(Path(folds_file).read_text())
+    df = (
+        pd.read_csv(table_file)
+        .sort_values([spec["group_col"], id_col])
+        .reset_index(drop=True)
+    )
+    groups = df[spec["group_col"]].to_numpy()
+    events = df[event_col].to_numpy()
+    folds = {
+        arm: [(np.array(f["train"]), np.array(f["test"])) for f in spec[arm]]
+        for arm in ARMS
+    }
+
+    def span(sizes):
+        low, high = min(sizes), max(sizes)
+        return f"{low:,}" if low == high else f"{low:,} to {high:,}"
+
+    arms = [
+        {
+            "Arm": arm,
+            "Folds": len(pairs),
+            "Train rows": span([len(tr) for tr, _ in pairs]),
+            "Test rows": span([len(te) for _, te in pairs]),
+        }
+        for arm, pairs in folds.items()
+    ]
+    report_utils.table(pd.DataFrame(arms), right=("Train rows", "Test rows"))
+
+    report_utils.log("Temporal folds (the matched arm has the same sizes)")
+    rows = []
+    for i, (tr, te) in enumerate(folds["temporal"], 1):
+        tg = sorted(set(groups[tr]))
+        shown = f"{tg[0]}-{tg[-1]}" if len(tg) > 1 else str(tg[0])
+        ev = pd.Series(events[te]).value_counts().sort_index()
+        rows.append(
+            {
+                "Fold": i,
+                "Train": len(tr),
+                "Test": len(te),
+                "Train groups": shown,
+                "Test group": groups[te][0],
+                "Events in test": " ".join(f"{k}:{v}" for k, v in ev.items()),
+            }
+        )
+    report_utils.table(pd.DataFrame(rows))
