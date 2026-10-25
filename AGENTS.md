@@ -26,9 +26,9 @@ Data Science, Stockholm University.
 
 ## Data
 
-- Everything a script writes goes under `data/<dataset>/`, in numbered folders such
-  as `0_raw`, `1_merged`, `2_folds`, `3_normalized`. Do not write to
-  a `results/` folder.
+- The `data/` folder is the input and the output of the pipelines. Scripts read and
+  write under `data/<dataset>/`, in numbered folders such as `0_raw`, `1_merged`,
+  `2_folds`, `3_normalized`.
 - Put folders and settings in a section at the top of each pipeline, as constants.
   Paths are relative to the project folder, and the seed is fixed in the code.
 - Create output folders in the script, so it works on a fresh checkout.
@@ -38,6 +38,12 @@ Data Science, Stockholm University.
 - Call the medical dataset "medical", not "clinical".
 - Every cleaning or preprocessing step prints what it did and how many rows it
   removed.
+
+## Logs
+
+- Every run of a pipeline copies what it prints to a new file,
+  `logs/<pipeline name>_<YYYY-MM-DD>_<HH-mm-ss>.log`, for example
+  `logs/0_prepare_medical_2026-10-25_14-30-05.log`. The folder is not tracked by git.
 
 ## Comments
 

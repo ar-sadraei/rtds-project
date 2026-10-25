@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """
+Choose the settings of every model inside every fold of every arm, with that fold's
+training rows only. Resumable: tuned cells are skipped.
+
 Run after the prepare pipeline:
     venv/bin/python src/pipelines/1_tune_financial.py
 """
@@ -14,11 +17,11 @@ from utils import benchmark_utils, report_utils
 # ----------------------------------------------------------------------------------------
 # 1. Folders and settings
 # ----------------------------------------------------------------------------------------
+FOLDS_DIR = Path("data/financial/2_folds")
 NORMALIZED_DIR = Path("data/financial/3_normalized")
 TUNING_DIR = Path("data/financial/4_tuning")
 
-# (cohort, number of temporal folds)
-COHORTS = (("calm", 5), ("crisis", 4))
+COHORTS = ("calm", "crisis")
 
 ID_COLUMN = "loan_id"
 GROUP_COLUMN = "vintage"
@@ -31,12 +34,12 @@ BUDGET = 10
 
 
 def main() -> None:
-    for cohort, n_folds in COHORTS:
+    report_utils.start_log(Path(__file__).stem)
+    for cohort in COHORTS:
         report_utils.h1(f"{cohort.upper()} COHORT: TUNING")
         benchmark_utils.tune(
+            FOLDS_DIR / f"financial-{cohort}.json",
             NORMALIZED_DIR / cohort,
-            "temporal",
-            n_folds,
             ID_COLUMN,
             GROUP_COLUMN,
             N_CAUSES,

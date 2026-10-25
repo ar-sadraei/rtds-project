@@ -5,8 +5,46 @@ Shared console output: a two level title, a settings string and a table.
 Every pipeline prints progress as log lines while it works and a table at the end.
 """
 
+import sys
+from datetime import datetime
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
+
+
+class _Tee:
+    """Write to the console and to a log file, flushing each time so the file is live."""
+
+    def __init__(self, stream, file):
+        self.stream, self.file = stream, file
+
+    def write(self, text):
+        self.stream.write(text)
+        self.file.write(text)
+        self.file.flush()
+        return len(text)
+
+    def flush(self):
+        self.stream.flush()
+        self.file.flush()
+
+    def __getattr__(self, name):
+        return getattr(self.stream, name)
+
+
+def start_log(name: str) -> None:
+    """Copy everything printed from now on, errors included, to a new file in logs/."""
+    log_dir = Path("logs")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    file = open(
+        log_dir / f"{name}_{datetime.now():%Y-%m-%d_%H-%M-%S}.log",
+        "w",
+        encoding="utf-8",
+    )
+    sys.stdout = _Tee(sys.stdout, file)
+    sys.stderr = _Tee(sys.stderr, file)
+
 
 # True when the last printed line was empty, so no gap is printed twice
 _at_blank = True
@@ -47,8 +85,10 @@ def title_case(text: str) -> str:
 def h2(text: str) -> None:
     """Sub title in title case, with a rule under it."""
     text = f" {title_case(text)} "
+    global _at_blank
     _gap()
-    print(f"{text}\n{'-' * len(text)}\n")
+    print(f"{text}\n{'-' * len(text)}")
+    _at_blank = False
 
 
 def log(text: str) -> None:

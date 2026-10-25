@@ -5,7 +5,7 @@ Prepare the financial data (Freddie Mac single-family mortgages), both cohorts.
 For each cohort (calm and crisis) it runs three steps in order, each one printing what
 it does:
   1. prepare: read the raw archives, clean them and save one CSV,
-  2. folds: build the temporal and random folds and check them for leaks,
+  2. folds: build the kfold, temporal and matched folds and check them for leaks,
   3. normalize: impute, scale and encode inside each fold, training rows only.
 
 The reasons behind the choices (default definition, 72-month cut, missing values) are
@@ -46,7 +46,7 @@ COHORTS = {
 }
 
 # Censor every loan at this age in months; 0 keeps full follow-up
-MAX_FOLLOW_UP = 72
+FOLLOW_UP_MONTHS = 72
 
 # True drops loans with no DTI instead of flagging them
 DROP_MISSING_DTI = False
@@ -56,6 +56,7 @@ SEED = 0
 
 
 def main() -> None:
+    report_utils.start_log(Path(__file__).stem)
     for cohort, cfg in COHORTS.items():
         report_utils.h1(f"{cohort} cohort: prepare")
         report_utils.h2("Read and clean")
@@ -64,7 +65,7 @@ def main() -> None:
             RAW_DIR,
             cfg["years"],
             cfg["max_rows"],
-            MAX_FOLLOW_UP,
+            FOLLOW_UP_MONTHS,
             SEED,
             DROP_MISSING_DTI,
             cfg["table"],
@@ -84,6 +85,11 @@ def main() -> None:
         report_utils.h2("Normalize inside each fold")
         financial_utils.normalize_cohort(
             cohort, cfg["table"], cfg["folds"], NORMALIZED_DIR
+        )
+
+        report_utils.h2("Fold Summary")
+        fold_utils.show_folds(
+            cfg["table"], financial_utils.ID_COLUMN, "event", cfg["folds"]
         )
 
 
