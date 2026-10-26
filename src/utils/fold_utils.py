@@ -114,9 +114,7 @@ def kfold_folds(
 
 
 def verify(
-    name: str,
     groups: np.ndarray,
-    events: np.ndarray,
     temporal: list,
     matched: list,
     kfold: list,
@@ -184,7 +182,7 @@ def build(
     tf = temporal_folds(g)
     mf = matched_random_folds(g, e, tf, seed)
     kf = kfold_folds(g, e, seed)
-    if not verify(name, g, e, tf, mf, kf):
+    if not verify(g, tf, mf, kf):
         return None
     return {
         "name": name,

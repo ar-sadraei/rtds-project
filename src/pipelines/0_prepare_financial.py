@@ -59,7 +59,6 @@ def prepare_financial() -> None:
         report_utils.h1(f"{cohort} cohort: prepare")
         report_utils.h2("Read and clean")
         financial_utils.prepare_cohort(
-            cohort,
             RAW_DIR,
             cfg["years"],
             cfg["max_rows"],

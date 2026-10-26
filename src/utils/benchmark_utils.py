@@ -40,7 +40,6 @@ from . import fold_utils, metric_utils, report_utils
 from .model_utils import MODELS, SEARCH_SPACE, SEEDED
 
 HORIZONS = np.array([12.0, 24.0, 36.0, 48.0, 60.0, 72.0])
-PRIMARY_HORIZON = 72.0
 
 # Share of a fold's training rows held out to choose the settings
 # How the arms are named in titles

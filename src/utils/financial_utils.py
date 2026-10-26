@@ -25,31 +25,45 @@ N_PERF_FIELDS = 35
 # Origination file: 0-based field index -> column name. These are the fields we
 # keep; everything else in the 31 is dropped.
 ORIG_FIELDS = {
-    0: "fico",  # credit score at origination
+    # credit score at origination
+    0: "fico",
     2: "first_time_buyer",
-    5: "mi_pct",  # mortgage insurance coverage %
+    # mortgage insurance coverage %
+    5: "mi_pct",
     6: "n_units",
-    7: "occupancy",  # P owner-occupied, S second home, I investment
-    8: "cltv",  # combined loan-to-value
-    9: "dti",  # debt-to-income
-    10: "orig_upb",  # original unpaid principal balance
-    11: "ltv",  # loan-to-value
-    12: "orig_rate",  # interest rate
-    13: "channel",  # R retail, B broker, C correspondent
+    # P owner-occupied, S second home, I investment
+    7: "occupancy",
+    # combined loan-to-value
+    8: "cltv",
+    # debt-to-income
+    9: "dti",
+    # original unpaid principal balance
+    10: "orig_upb",
+    # loan-to-value
+    11: "ltv",
+    # interest rate
+    12: "orig_rate",
+    # R retail, B broker, C correspondent
+    13: "channel",
     16: "state",
     17: "property_type",
     19: "loan_id",
-    20: "loan_purpose",  # P purchase, C cash-out refi, N no-cash-out refi
-    21: "orig_term",  # months
+    # P purchase, C cash-out refi, N no-cash-out refi
+    20: "loan_purpose",
+    # months
+    21: "orig_term",
     22: "n_borrowers",
 }
 
 # Performance file: 0-based field indices we read while streaming.
 P_LOAN_ID, P_PERIOD, P_DELINQ, P_AGE, P_ZB_CODE = 0, 1, 3, 4, 8
 
-DELINQ_DEFAULT = 3  # months past due that counts as default
-ZB_PREPAID = "01"  # zero balance code: prepaid or matured
-ZB_CREDIT = {"02", "03", "09", "15"}  # disposition codes meaning a credit loss
+# months past due that counts as default
+DELINQ_DEFAULT = 3
+# zero balance code: prepaid or matured
+ZB_PREPAID = "01"
+# disposition codes meaning a credit loss
+ZB_CREDIT = {"02", "03", "09", "15"}
 
 # ----------------------------------------------------------------------------------------
 # 3. Cleaning rules
@@ -203,12 +217,14 @@ def scan_performance(zf: zipfile.ZipFile, year: int) -> tuple[dict, int]:
             loan_id = fields[P_LOAN_ID]
             try:
                 age = int(fields[P_AGE])
-                period = int(fields[P_PERIOD])  # YYYYMM
+                # YYYYMM
+                period = int(fields[P_PERIOD])
             except ValueError:
                 malformed += 1
                 continue
 
-            month = (period // 100) * 12 + (period % 100)  # absolute month
+            # absolute month
+            month = (period // 100) * 12 + (period % 100)
 
             rec = loans.get(loan_id)
             if rec is None:
@@ -495,7 +511,6 @@ def validate(df: pd.DataFrame, follow_up_months: int, drop_missing_dti: bool) ->
 # Preparing one cohort
 # ----------------------------------------------------------------------------------------
 def prepare_cohort(
-    cohort: str,
     raw_dir: Path,
     years: list,
     max_rows: int,

@@ -1,6 +1,7 @@
 # Install everything in one go:
-#     python3 -m venv ~/venvs/rtds        # keep the venv OUT of the iCloud folder
-#     ~/venvs/rtds/bin/pip install -r requirements.txt
+#     python3 -m venv venv
+#     source venv/bin/activate
+#     pip install -r requirements.txt
 #
 # Three things here are deliberate; please do not "fix" them:
 #
@@ -20,7 +21,7 @@
 #
 # Do NOT add auton-survival. It pins pandas<2.0 and torch<2.0, cannot coexist
 # with comprisk, and would break DeepHit. Deep Survival Machines is vendored
-# in vendor/nfg/DeepSurvivalMachines instead.
+# in vendor/DeepSurvivalMachines instead.
 autograd==1.9.1
 autograd-gamma==0.5.0
 black==26.10.1
