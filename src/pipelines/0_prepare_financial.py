@@ -8,9 +8,6 @@ it does:
   2. folds: build the kfold, temporal and matched folds and check them for leaks,
   3. normalize: impute, scale and encode inside each fold, training rows only.
 
-The reasons behind the choices (default definition, 72-month cut, missing values) are
-in README.md under Notes.
-
 Edit the folders and settings below, then run from the project folder:
     venv/bin/python src/pipelines/0_prepare_financial.py
 """
