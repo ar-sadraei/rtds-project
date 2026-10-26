@@ -1,55 +1,16 @@
-# ---- data ------------------------------------------------------------
-# Freddie Mac SFLLD archives are free for academic use but may not be
-# redistributed, so nothing under data/ is tracked. The pipelines in
-# src/pipelines/ rebuild everything from the raw files; README.md has the
-# download links.
+# The Freddie Mac data may not be redistributed, so nothing under data/ is tracked.
+# The pipelines rebuild everything from the raw files (see README.md).
 data/
 
-# ---- environment -----------------------------------------------------
+# One log file per run, written by report_utils.start_log.
+logs/
+
+# Environment and caches.
+venv/
 .venv/
 __pycache__/
 *.py[cod]
 
-# ---- LaTeX build artefacts ------------------------------------------
-*.aux
-*.bbl
-*.blg
-*.log
-*.out
-*.synctex.gz
-*.fls
-*.fdb_latexmk
-*.toc
-
-# Generated tables and figures are reproducible from results/ via
-# src/make_tables.py and src/make_figure.py, but they are small and
-# keeping them means the PDF builds on a clean checkout.
-!report/tab_*.tex
-!report/fig_*.pdf
-
-# ---- notebooks -------------------------------------------------------
-# The benchmark is Python files, not notebooks. The two teaching notebooks
-# are kept locally for reference and are not part of the pipeline.
-notebooks/
-
-# ---- run output ------------------------------------------------------
-# Metrics, logs and figures written by the benchmark. Until now only *.log
-# was ignored, which covered everything in results/ by coincidence: a
-# metrics CSV would have been picked up by a bare `git add -A`. When the
-# final tables for the paper are settled, add them deliberately with
-# `git add -f results/<file>`.
-results/
-
-# ---- pipeline logs ---------------------------------------------------
-# Written live by report_utils.start_log, one file per run.
-logs/
-
-# ---- local notes -----------------------------------------------------
-DRAFT_TODO.md
-
-# ---- os --------------------------------------------------------------
+# OS and editor files.
 .DS_Store
-
-# editor backups
 *.bak
-method_draft.tex

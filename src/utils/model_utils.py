@@ -28,9 +28,7 @@ from pathlib import Path
 
 import numpy as np
 
-DSM_DIR = (
-    Path(__file__).resolve().parents[2] / "vendor" / "nfg" / "DeepSurvivalMachines"
-)
+DSM_DIR = Path(__file__).resolve().parents[2] / "vendor" / "DeepSurvivalMachines"
 if str(DSM_DIR) not in sys.path:
     sys.path.insert(0, str(DSM_DIR))
 
@@ -298,11 +296,4 @@ SEARCH_SPACE = {
         "layers": [[32], [64], [32, 32]],
         "lr": [1e-3, 1e-2],
     },
-}
-
-DEFAULTS = {
-    "cs-RSF": {"n_estimators": 100, "min_samples_leaf": 15, "max_depth": 15},
-    "Fine-Gray": {"penalty": "none"},
-    "DeepHit": {},
-    "DSM": {},
 }

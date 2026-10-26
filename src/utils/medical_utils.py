@@ -15,34 +15,43 @@ from . import fold_utils, report_utils
 # ----------------------------------------------------------------------------------------
 DEMOGRAPHY_COLUMNS = {
     "SEQN": "participant_id",
-    "SDDSRVYR": "cycle_code",  # only used to build the 'cycle' column
+    # only used to build the 'cycle' column
+    "SDDSRVYR": "cycle_code",
     "RIDAGEYR": "age_years",
-    "RIAGENDR": "sex",  # 1 male, 2 female
-    "RIDRETH1": "race_ethnicity",  # 1 Mexican American, 2 other Hispanic, 3 white, 4 black, 5 other
+    # 1 male, 2 female
+    "RIAGENDR": "sex",
+    # 1 Mexican American, 2 other Hispanic, 3 white, 4 black, 5 other
+    "RIDRETH1": "race_ethnicity",
 }
 
 SMOKING_COLUMNS = {
     "SEQN": "participant_id",
-    "SMQ020": "smoked_100_cigarettes",  # 1 yes, 2 no, 7 refused, 9 don't know
-    "SMQ040": "smokes_now",  # 1 every day, 2 some days, 3 not at all
+    # 1 yes, 2 no, 7 refused, 9 don't know
+    "SMQ020": "smoked_100_cigarettes",
+    # 1 every day, 2 some days, 3 not at all
+    "SMQ040": "smokes_now",
 }
 
 # Fixed-width positions (1-based, inclusive) in the mortality files.
 MORTALITY_COLUMNS = {
     # original: (new name, first character, last character)
     "SEQN": ("participant_id", 1, 6),
+    # 1 eligible, 2 under 18, 3 not linkable
     "ELIGSTAT": (
         "mortality_eligibility",
         15,
         15,
-    ),  # 1 eligible, 2 under 18, 3 not linkable
-    "MORTSTAT": ("mortality_status", 16, 16),  # 0 assumed alive, 1 assumed dead
+    ),
+    # 0 assumed alive, 1 assumed dead
+    "MORTSTAT": ("mortality_status", 16, 16),
+    # 1 heart, 2 cancer, ..., 10 all other causes
     "UCOD_LEADING": (
         "cause_of_death",
         17,
         19,
-    ),  # 1 heart, 2 cancer, ..., 10 all other causes
-    "PERMTH_EXM": ("followup_months", 46, 48),  # months from the exam
+    ),
+    # months from the exam
+    "PERMTH_EXM": ("followup_months", 46, 48),
 }
 
 # Meaning of the survey code in the demography files (SDDSRVYR)

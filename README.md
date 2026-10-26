@@ -87,7 +87,7 @@ data/
 
 ### Note: `vendor/`
 
-Deep Survival Machines (DSM) and Neural Fine-Gray have no usable release on PyPI, so
-their source code is kept in `vendor/`. The pipelines import DSM from there. Do not
-edit it, and do not `pip install auton-survival` to get DSM, since that breaks the
-other packages.
+Deep Survival Machines (DSM) has no usable release on PyPI, so its source code is kept
+in `vendor/DeepSurvivalMachines`. The pipelines import DSM from there. Do not edit it,
+and do not `pip install auton-survival` to get DSM, since that breaks the other
+packages.
