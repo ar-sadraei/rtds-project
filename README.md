@@ -85,9 +85,12 @@ data/
 | `5_benchmark`  | scores and predictions per model | `2_benchmark` |
 | `analysis/`    | the result tables                | `3_analyze`   |
 
-### Note: `vendor/`
+### Notes
 
-Deep Survival Machines (DSM) has no usable release on PyPI, so its source code is kept
-in `vendor/DeepSurvivalMachines`. The pipelines import DSM from there. Do not edit it,
-and do not `pip install auton-survival` to get DSM, since that breaks the other
-packages.
+- `hazardous` is installed from a git commit, not a version. CR D-calibration is in
+  no release yet, and the commit reports the same version as the release.
+- `numba`, `numpy` and `pandas` are pinned below the latest because `comprisk` and
+  `lifelines` require it.
+- Deep Survival Machines (DSM) has no usable PyPI release, so its source is in
+  `vendor/DeepSurvivalMachines`. Do not edit it, and do not install `auton-survival`
+  (it pins old `pandas` and `torch` and breaks the other packages).

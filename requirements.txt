@@ -1,27 +1,3 @@
-# Install everything in one go:
-#     python3 -m venv venv
-#     source venv/bin/activate
-#     pip install -r requirements.txt
-#
-# Three things here are deliberate; please do not "fix" them:
-#
-# 1. hazardous is a git URL, not a version pin. CR D-calibration (the proper
-#    distributional calibration measure for competing risks) is not in any
-#    release -- it lives in soda-inria/hazardous PR #100. That build reports
-#    its version as 0.2.0, identical to the released package, so the commit
-#    hash is the only way to tell them apart. `hazardous==0.2.0` would silently
-#    install the release and d_cr_calibration would be missing.
-#
-# 2. numba and numpy sit below latest because comprisk requires numba<0.66,
-#    and numba 0.65.1 requires numpy<2.5.
-#
-# 3. pandas is 2.x, not 3.x, because lifelines (pulled in by hazardous)
-#    requires pandas<3.0. The data pipeline was checked on both and produces
-#    identical output.
-#
-# Do NOT add auton-survival. It pins pandas<2.0 and torch<2.0, cannot coexist
-# with comprisk, and would break DeepHit. Deep Survival Machines is vendored
-# in vendor/DeepSurvivalMachines instead.
 autograd==1.9.1
 autograd-gamma==0.5.0
 black==26.10.1
