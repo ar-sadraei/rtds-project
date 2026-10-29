@@ -36,17 +36,15 @@ python src/pipelines/1_tune_financial.py
 python src/pipelines/2_benchmark_medical.py
 python src/pipelines/2_benchmark_financial.py
 python src/pipelines/3_analyze.py
-python src/pipelines/4_summarize.py
 ```
 
 Or run all of them in this order with `python src/main.py`.
 
 **4. Output.** Every step writes into the numbered folders of `data/` (see
-[Data folder](#data-folder)). The final tables are in `data/analysis/`, and the
-hypothesis tables are in `data/analysis/6_summary/`. Each run also writes what it prints
-to `logs/<pipeline name>_<date>_<time>.log`. The slow steps
-(tune, benchmark and the analysis) skip the work already saved, so an interrupted run
-continues where it stopped.
+[Data folder](#data-folder)). The H1 tables (Friedman, Nemenyi and the gap per cell)
+are in `data/analysis/`. Each run also writes what it prints to
+`logs/<pipeline name>_<date>_<time>.log`. The slow steps (tune and benchmark) skip the
+work already saved, so an interrupted run continues where it stopped.
 
 ## Project structure
 
@@ -54,7 +52,7 @@ continues where it stopped.
 src/
   main.py                     runs all the pipelines in order
   pipelines/                  runnable scripts, numbered in run order
-    0_prepare_*.py   1_tune_*.py   2_benchmark_*.py   3_analyze.py   4_summarize.py
+    0_prepare_*.py   1_tune_*.py   2_benchmark_*.py   3_analyze.py
   utils/                      the functions the pipelines call
 data/                         input and output, not in git
 logs/                         one log file per run, not in git
@@ -64,7 +62,7 @@ AGENTS.md                     rules for people and agents working in the repo
 ```
 
 Pipelines are split by dataset (`*_medical.py` and `*_financial.py`), except the
-analysis and the summary, which read both.
+analysis, which reads both.
 
 ### Data
 
@@ -74,7 +72,7 @@ Each dataset has its own folder, and every step writes to the next numbered fold
 data/
   medical/     0_raw  1_merged  2_folds  3_normalized  4_tuning  5_benchmark
   financial/   0_raw  1_merged  2_folds  3_normalized  4_tuning  5_benchmark
-  analysis/    result tables, one folder per question
+  analysis/    the H1 tables
 ```
 
 | folder         | content                          | written by    |
@@ -85,8 +83,7 @@ data/
 | `3_normalized` | the tables used by the models    | `0_prepare`   |
 | `4_tuning`     | the best settings per model      | `1_tune`      |
 | `5_benchmark`  | scores and predictions per model | `2_benchmark` |
-| `analysis/`    | the result tables                | `3_analyze`   |
-| `analysis/6_summary/` | the hypothesis tables     | `4_summarize` |
+| `analysis/`    | the H1 tables                    | `3_analyze`   |
 
 ### Notes
 
