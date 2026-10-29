@@ -21,6 +21,7 @@ from pipelines import (
     benchmark_medical,
     benchmark_financial,
     analyze,
+    summarize,
 )
 
 
@@ -32,6 +33,7 @@ def main() -> None:
     benchmark_medical()
     benchmark_financial()
     analyze()
+    summarize()
 
 
 if __name__ == "__main__":

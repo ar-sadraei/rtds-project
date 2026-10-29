@@ -148,6 +148,19 @@ def analyze() -> None:
         pairs.to_csv(MAIN_DIR / "deep_vs_classical.csv", index=False)
         labels = A.domain_labels(pairs)
         labels.to_csv(MAIN_DIR / "domain_labels.csv", index=False)
+        reversal_cells = A.reversals(pairs)
+        reversal_cells.to_csv(MAIN_DIR / "h1_reversal_cells.csv", index=False)
+        show(
+            "H1: does the winner change with metric, period or domain?",
+            A.reversal_counts(reversal_cells),
+            MAIN_DIR,
+            "h1_reversals",
+        )
+        report_utils.log(
+            f"A reversal is a pair of cells where the deep advantage has opposite signs "
+            f"and both p-values are below 0.05. Cells are in "
+            f"{MAIN_DIR}/h1_reversal_cells.csv."
+        )
         show(
             "Main question and SQ1: deep versus classical",
             A.label_counts(labels, ["dataset", "arm", "measure"]),

@@ -36,13 +36,15 @@ python src/pipelines/1_tune_financial.py
 python src/pipelines/2_benchmark_medical.py
 python src/pipelines/2_benchmark_financial.py
 python src/pipelines/3_analyze.py
+python src/pipelines/4_summarize.py
 ```
 
 Or run all of them in this order with `python src/main.py`.
 
 **4. Output.** Every step writes into the numbered folders of `data/` (see
-[Data folder](#data-folder)), and the final tables are in `data/analysis/`. Each run
-also writes what it prints to `logs/<pipeline name>_<date>_<time>.log`. The slow steps
+[Data folder](#data-folder)). The final tables are in `data/analysis/`, and the
+hypothesis tables are in `data/analysis/6_summary/`. Each run also writes what it prints
+to `logs/<pipeline name>_<date>_<time>.log`. The slow steps
 (tune, benchmark and the analysis) skip the work already saved, so an interrupted run
 continues where it stopped.
 
@@ -52,7 +54,7 @@ continues where it stopped.
 src/
   main.py                     runs all the pipelines in order
   pipelines/                  runnable scripts, numbered in run order
-    0_prepare_*.py            1_tune_*.py          2_benchmark_*.py       3_analyze.py
+    0_prepare_*.py   1_tune_*.py   2_benchmark_*.py   3_analyze.py   4_summarize.py
   utils/                      the functions the pipelines call
 data/                         input and output, not in git
 logs/                         one log file per run, not in git
@@ -62,7 +64,7 @@ AGENTS.md                     rules for people and agents working in the repo
 ```
 
 Pipelines are split by dataset (`*_medical.py` and `*_financial.py`), except the
-analysis, which reads both.
+analysis and the summary, which read both.
 
 ### Data
 
@@ -84,6 +86,7 @@ data/
 | `4_tuning`     | the best settings per model      | `1_tune`      |
 | `5_benchmark`  | scores and predictions per model | `2_benchmark` |
 | `analysis/`    | the result tables                | `3_analyze`   |
+| `analysis/6_summary/` | the hypothesis tables     | `4_summarize` |
 
 ### Notes
 
