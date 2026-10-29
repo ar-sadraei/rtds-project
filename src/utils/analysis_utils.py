@@ -139,6 +139,23 @@ def interval(draws):
     return np.percentile(draws, [low, 100 - low], axis=0)
 
 
+def p_value(draws):
+    """
+    Two-sided bootstrap p-value over the first axis: twice the smaller share of
+    replicates on either side of 0, with one added to each count so it is never 0.
+    """
+    n = draws.shape[0]
+    below = ((draws <= 0).sum(axis=0) + 1) / (n + 1)
+    above = ((draws >= 0).sum(axis=0) + 1) / (n + 1)
+    return np.minimum(1.0, 2 * np.minimum(below, above))
+
+
+def p_below(draws):
+    """One-sided bootstrap p-value that the first-axis draws are below 0."""
+    n = draws.shape[0]
+    return np.minimum(1.0, ((draws >= 0).sum(axis=0) + 1) / (n + 1))
+
+
 def label_advantage(low, high):
     if low > 0:
         return "deep better"
@@ -150,6 +167,7 @@ def label_advantage(low, high):
 def cell_frame(point, draws, n_causes, extra):
     """Flatten (pairs, measures, causes, horizons) arrays into one row per cell."""
     low, high = interval(draws)
+    p_values = p_value(draws)
     rows = []
     for p, (d, c) in enumerate(PAIRS):
         for m, measure in enumerate(MEASURES):
@@ -165,6 +183,7 @@ def cell_frame(point, draws, n_causes, extra):
                             "value": point[p, m, k, h],
                             "ci_low": low[p, m, k, h],
                             "ci_high": high[p, m, k, h],
+                            "p_value": p_values[p, m, k, h],
                         }
                     )
     return pd.DataFrame(rows)
@@ -201,6 +220,47 @@ def domain_labels(pairs):
     return counts
 
 
+def reversals(pairs):
+    """
+    H1: does the winner change with the metric, the period or the domain?
+
+    Two cells are compared when they differ in one factor only. A reversal needs the
+    deep advantage to have opposite signs, and its p-value is the larger of the two
+    cell p-values (both must be significant), or 1 when the signs agree. Periods
+    compare temporal with matched. Domains compare datasets at the same cause number.
+    """
+    same_cell = ["pair", "cause", "horizon"]
+    factors = {
+        "metric": (["dataset", "arm"], "measure"),
+        "period": (["dataset", "measure"], "arm"),
+        "domain": (["arm", "measure"], "dataset"),
+    }
+    out = []
+    for factor, (same, vary) in factors.items():
+        cells = pairs[same + same_cell + [vary, "advantage", "p_value"]]
+        both = cells.merge(cells, on=same + same_cell, suffixes=("_a", "_b"))
+        both = both[both[f"{vary}_a"] < both[f"{vary}_b"]]
+        if factor == "period":
+            both = both[(both.arm_a == "matched") & (both.arm_b == "temporal")]
+        opposite = both.advantage_a * both.advantage_b < 0
+        both = both.assign(
+            factor=factor,
+            p_value=np.where(
+                opposite, both[["p_value_a", "p_value_b"]].max(axis=1), 1.0
+            ),
+        ).rename(columns={f"{vary}_a": "a", f"{vary}_b": "b"})
+        out.append(both[["factor", "a", "b"] + same + same_cell + ["p_value"]])
+    return pd.concat(out, ignore_index=True)
+
+
+def reversal_counts(reversal_cells):
+    """Per factor and pair of levels: cells compared and cells with p below 0.05."""
+    grouped = reversal_cells.groupby(["factor", "a", "b"])
+    return grouped.p_value.agg(
+        cells="size", reversals=lambda p: int((p < 0.05).sum())
+    ).reset_index()
+
+
 def label_counts(labels, keys):
     """How many cells carry each label."""
     return labels.groupby(keys + ["label"]).size().unstack(fill_value=0).reset_index()
@@ -215,12 +275,14 @@ def arm_difference(dataset, temporal, matched):
 
     The two arms were resampled independently, so replicate b of one is paired with
     replicate b of the other without any dependence between them. A negative value
-    means the deep advantage is smaller on later data.
+    means the deep advantage is smaller on later data. p_smaller is the one-sided
+    p-value of that alternative.
     """
     (adv_pt, adv_bt), (adv_pm, adv_bm) = temporal, matched
     point = adv_pt - adv_pm
     draws = adv_bt - adv_bm
     frame = cell_frame(point, draws, point.shape[2], {"dataset": dataset})
+    frame["p_smaller"] = p_below(draws).ravel()
     frame["label"] = [
         (
             "advantage larger on later data"
