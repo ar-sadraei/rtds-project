@@ -173,4 +173,3 @@ def table(df: pd.DataFrame, decimals: int = 5, right: tuple = ()) -> None:
     for lines in body:
         print("\n".join(lines))
         print("-" * width)
-    print()

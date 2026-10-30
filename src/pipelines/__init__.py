@@ -15,4 +15,3 @@ benchmark_financial = import_module(
     ".2_benchmark_financial", __package__
 ).benchmark_financial
 analyze = import_module(".3_analyze", __package__).analyze
-summarize = import_module(".4_summarize", __package__).summarize
