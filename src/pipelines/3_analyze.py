@@ -29,15 +29,19 @@ import pandas as pd
 
 from utils import report_utils
 from utils.analysis_utils import (
+    agreement_table,
     arm_differences,
     cell_table,
     difference_table,
+    fold_agreement,
     fold_gaps,
     friedman_metric,
     load,
     missing_values,
+    model_values,
     nemenyi,
     seed_mean,
+    sign_test_tau,
     wilcoxon_overall,
 )
 
@@ -55,6 +59,9 @@ H1_CELLS_FILE = OUTPUT_DIR / "h1_cells.csv"
 H1_NEMENYI_FILE = OUTPUT_DIR / "h1_nemenyi.csv"
 H2_TESTS_FILE = OUTPUT_DIR / "h2_wilcoxon.csv"
 H2_CELLS_FILE = OUTPUT_DIR / "h2_cells.csv"
+H3_TESTS_FILE = OUTPUT_DIR / "h3_sign_test.csv"
+H3_FOLDS_FILE = OUTPUT_DIR / "h3_folds.csv"
+H3_CELLS_FILE = OUTPUT_DIR / "h3_cells.csv"
 
 METRICS = ("scaled_brier", "concordance", "calibration_gap", "cr_d_calibration")
 HORIZONS = (12.0, 36.0, 60.0)
@@ -66,6 +73,12 @@ H1_DATASETS = ("medical", "financial-calm")
 # Later data first, then the random split it is compared with
 H2_ARMS = ("temporal", "matched")
 H2_DATASETS = ("medical", "financial-calm", "financial-crisis")
+
+# The matched arm is the control for the temporal arm in H2, so it is not used here
+H3_ARMS = ("kfold", "temporal")
+H3_DATASETS = ("medical", "financial-calm", "financial-crisis")
+H3_RANK_METRIC = "concordance"
+H3_PROBABILITY_METRIC = "cr_d_calibration"
 
 
 def save(frame: pd.DataFrame, path: Path) -> None:
@@ -166,6 +179,45 @@ def test_h2(folds: pd.DataFrame) -> None:
         report_utils.log(f"H2: H0 is not rejected, p = {p:.4f}, not below {ALPHA}.")
 
 
+def test_h3(folds: pd.DataFrame) -> None:
+    """Kendall's tau per fold between the two orderings, then a sign test."""
+    report_utils.h2("Do the Rankings Agree?")
+    report_utils.log(f"Splits: {', '.join(H3_ARMS)}")
+    report_utils.log(f"Datasets: {', '.join(H3_DATASETS)}")
+    report_utils.log(f"{H3_RANK_METRIC} against {H3_PROBABILITY_METRIC}")
+
+    values = model_values(
+        folds, H3_ARMS, H3_DATASETS, (H3_RANK_METRIC, H3_PROBABILITY_METRIC), HORIZONS
+    )
+    per_fold = fold_agreement(values, H3_RANK_METRIC, H3_PROBABILITY_METRIC)
+    save(per_fold, H3_FOLDS_FILE)
+
+    report_utils.h2("Agreement per Cell")
+    cells = agreement_table(per_fold)
+    report_utils.table(cells, decimals=4)
+    save(cells, H3_CELLS_FILE)
+
+    tests = pd.DataFrame([sign_test_tau(per_fold, ALPHA)])
+    report_utils.table(tests, decimals=4)
+    save(tests, H3_TESTS_FILE)
+
+    row = tests.iloc[0]
+    report_utils.log(
+        "tau is negative when the model that ranks best is not the model with the "
+        "best probabilities. Tied folds are left out of the sign test."
+    )
+    if row.rejected:
+        report_utils.log(
+            f"H3 is supported: p = {row.p_value:.4f}, below {ALPHA}. The two "
+            "orderings disagree."
+        )
+    else:
+        report_utils.log(
+            f"H3: H0 is not rejected, p = {row.p_value:.4f}. The smallest p value "
+            f"possible with {int(row.untied)} untied folds is {row.smallest_p:.4f}."
+        )
+
+
 @report_utils.logged
 def analyze() -> None:
     """Run every step of this process."""
@@ -181,6 +233,8 @@ def analyze() -> None:
     test_h1(folds)
     report_utils.h1("ANALYZE: H2")
     test_h2(folds)
+    report_utils.h1("ANALYZE: H3")
+    test_h3(folds)
     report_utils.log(f"Saved tables in {OUTPUT_DIR}")
 
 

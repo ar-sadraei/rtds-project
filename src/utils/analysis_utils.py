@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test H1 and H2 on the benchmark rows.
+Test H1, H2 and H3 on the benchmark rows.
 
 The gap is the DL group (DeepHit and DSM) minus the classical group (Fine-Gray and
 cs-RSF) on one metric in one domain, signed so that a positive value means DL is better.
@@ -14,6 +14,11 @@ H2: is the gap smaller on later data than on a random split of the same size? Ea
 temporal fold is paired with its matched random fold. The standardized differences are
 averaged over the metrics, so each fold pair gives one number, and one exact one sided
 Wilcoxon signed-rank test runs on the fold pairs of all domains.
+
+H3: do the ranking and the probabilities order the models the same way? The four models
+are ranked inside each fold by concordance and by CR D-calibration, Kendall's tau
+compares the two orderings, and an exact two sided sign test runs on the tau values.
+Here the models are ranked, so no standardization is needed.
 
 LIMITS
     The folds share training data, so they are not independent. All p values are
@@ -265,3 +270,103 @@ def difference_table(pairs, datasets, metrics):
     )
     order = pd.MultiIndex.from_product([metrics, datasets], names=["metric", "dataset"])
     return out.reindex(order).reset_index()
+
+
+# ----------------------------------------------------------------------------------------
+# H3
+# ----------------------------------------------------------------------------------------
+def oriented(value, metric):
+    """The value signed so that a larger number is always better."""
+    return value if metric in HIGHER_IS_BETTER else -value
+
+
+def kendall_tau(first, second):
+    """
+    Kendall's tau between two orderings of the same models.
+
+    Both inputs are signed so that larger is better. Tau is 1 when the orderings agree
+    on every pair of models and -1 when they disagree on every pair.
+    """
+    concordant = discordant = 0
+    for i, j in itertools.combinations(range(len(first)), 2):
+        direction = (first[i] - first[j]) * (second[i] - second[j])
+        if direction > 0:
+            concordant += 1
+        elif direction < 0:
+            discordant += 1
+    pairs = concordant + discordant
+    return (concordant - discordant) / pairs if pairs else np.nan
+
+
+def fold_agreement(values, rank_metric, probability_metric):
+    """
+    Kendall's tau between the two model orderings, one row per fold.
+
+    `values` is the output of model_values. A negative tau means the models that rank
+    best are not the models with the best probabilities. A fold is left out when
+    either metric is missing for any model.
+    """
+    models = [*DEEP, *CLASSICAL]
+    rows = []
+    for (dataset, arm, fold), group in values.groupby(["dataset", "arm", "fold"]):
+        wide = group.set_index(["metric", "model"]).value.unstack("model")
+        if not {rank_metric, probability_metric} <= set(wide.index):
+            continue
+        if not set(models) <= set(wide.columns):
+            continue
+        ranking = [oriented(wide.at[rank_metric, m], rank_metric) for m in models]
+        probability = [
+            oriented(wide.at[probability_metric, m], probability_metric) for m in models
+        ]
+        if np.isnan(ranking).any() or np.isnan(probability).any():
+            continue
+        rows.append(
+            {
+                "dataset": dataset,
+                "arm": arm,
+                "fold": fold,
+                "tau": kendall_tau(ranking, probability),
+                "best_by_rank": models[int(np.argmax(ranking))],
+                "best_by_probability": models[int(np.argmax(probability))],
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def sign_test_tau(per_fold, alpha):
+    """
+    Exact two sided sign test on the tau values, with the tied folds left out.
+
+    With n untied folds the smallest p value the test can return is 2 / 2 ** n, so a
+    small n cannot reject however consistent the folds are.
+    """
+    tau = per_fold.tau.dropna()
+    untied = tau[tau != 0]
+    negative = int((untied < 0).sum())
+    positive = int((untied > 0).sum())
+    n = negative + positive
+    p = float(stats.binomtest(max(negative, positive), n).pvalue) if n else np.nan
+    return {
+        "folds": len(tau),
+        "untied": n,
+        "negative": negative,
+        "positive": positive,
+        "mean_tau": float(tau.mean()) if len(tau) else np.nan,
+        "p_value": p,
+        "smallest_p": 2 / 2**n if n else np.nan,
+        "rejected": bool(n and p < alpha),
+    }
+
+
+def agreement_table(per_fold):
+    """Mean tau, the fold counts and how often the two best models differ, per cell."""
+    marked = per_fold.assign(
+        untied=per_fold.tau != 0,
+        differs=per_fold.best_by_rank != per_fold.best_by_probability,
+    )
+    return marked.groupby(["dataset", "arm"], as_index=False).agg(
+        folds=("tau", "size"),
+        untied=("untied", "sum"),
+        mean_tau=("tau", "mean"),
+        best_model_differs=("differs", "sum"),
+    )
