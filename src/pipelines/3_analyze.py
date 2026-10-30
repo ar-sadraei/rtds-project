@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
 """
-Analyze the benchmark: the Friedman test for H1.
+Analyze the benchmark: the tests for H1 and H2.
 
-H0: the relative performance of DL and classical models does not change with the
-evaluation metric.
-H1: it does change.
+The relative performance is the gap, DL group minus classical group, positive when DL
+is better.
 
-The relative performance is the gap, DL group minus classical group, standardized per
-metric. The test is a Friedman test over the metrics (10 blocks, the domain and fold
-pairs). H1 is supported when its p value is below ALPHA, and then the Nemenyi test
-compares the metrics in pairs. The folds share training data,
-so the p value is approximate. A significant result does not say where the gap changes,
-and the claim covers only these cells.
+H1: does the gap change with the evaluation metric? A Friedman test over the metrics
+on K-fold (10 blocks, the domain and fold pairs). When its p value is below ALPHA, the
+Nemenyi test compares the metrics in pairs.
+
+H2: is the DL advantage smaller on later data than on a standard split? Each temporal
+fold is paired with its matched random fold (same train and test sizes). The difference
+is averaged over the metrics, and one exact one sided Wilcoxon signed-rank test pools
+the fold pairs of the three domains. K-fold is not used.
+
+The folds share training data, so all p values are approximate. The claims cover only
+these cells.
 
     venv/bin/python src/pipelines/3_analyze.py
 """
@@ -25,13 +29,16 @@ import pandas as pd
 
 from utils import report_utils
 from utils.analysis_utils import (
+    arm_differences,
     cell_table,
+    difference_table,
     fold_gaps,
     friedman_metric,
     load,
     missing_values,
     nemenyi,
     seed_mean,
+    wilcoxon_overall,
 )
 
 # ----------------------------------------------------------------------------------------
@@ -40,17 +47,25 @@ from utils.analysis_utils import (
 BENCHMARK_FILES = {
     "medical": Path("data/medical/5_benchmark/medical.csv"),
     "financial-calm": Path("data/financial/5_benchmark/financial-calm.csv"),
+    "financial-crisis": Path("data/financial/5_benchmark/financial-crisis.csv"),
 }
 OUTPUT_DIR = Path("data/analysis")
-TESTS_FILE = OUTPUT_DIR / "h1_friedman.csv"
-CELLS_FILE = OUTPUT_DIR / "h1_cells.csv"
-NEMENYI_FILE = OUTPUT_DIR / "h1_nemenyi.csv"
+H1_TESTS_FILE = OUTPUT_DIR / "h1_friedman.csv"
+H1_CELLS_FILE = OUTPUT_DIR / "h1_cells.csv"
+H1_NEMENYI_FILE = OUTPUT_DIR / "h1_nemenyi.csv"
+H2_TESTS_FILE = OUTPUT_DIR / "h2_wilcoxon.csv"
+H2_CELLS_FILE = OUTPUT_DIR / "h2_cells.csv"
 
-ARM = "kfold"
-DATASETS = ("medical", "financial-calm")
 METRICS = ("scaled_brier", "concordance", "calibration_gap", "cr_d_calibration")
 HORIZONS = (12.0, 36.0, 60.0)
 ALPHA = 0.05
+
+H1_ARM = "kfold"
+H1_DATASETS = ("medical", "financial-calm")
+
+# Later data first, then the random split it is compared with
+H2_ARMS = ("temporal", "matched")
+H2_DATASETS = ("medical", "financial-calm", "financial-crisis")
 
 
 def save(frame: pd.DataFrame, path: Path) -> None:
@@ -58,37 +73,38 @@ def save(frame: pd.DataFrame, path: Path) -> None:
     path.write_text(frame.to_csv(index=False).rstrip("\n"))
 
 
-@report_utils.logged
-def analyze() -> None:
-    """Run every step of this process."""
-    report_utils.h1("ANALYZE")
-    report_utils.log(f"Split: {ARM}")
-    report_utils.log(f"Datasets: {', '.join(DATASETS)}")
-    report_utils.log(f"Metrics: {', '.join(METRICS)}")
-    report_utils.log(f"Horizons: {', '.join(f'{h:g}' for h in HORIZONS)}")
+def log_counts(frame: pd.DataFrame, unit: str) -> None:
+    counts = frame.groupby(["dataset", "metric"]).size().reset_index(name="n")
+    for dataset, metric, n in counts.itertuples(index=False):
+        report_utils.log(f"{dataset} {metric}: {n} {unit}")
 
-    raw = load(BENCHMARK_FILES[d] for d in DATASETS)
-    missing = missing_values(raw)
-    report_utils.log(f"Benchmark rows without a value: {int(missing.missing.sum())}")
 
-    per_fold, dropped = fold_gaps(seed_mean(raw), ARM, DATASETS, METRICS, HORIZONS)
-    for (dataset, metric), n in per_fold.groupby(["dataset", "metric"]).size().items():
-        report_utils.log(f"{dataset} {metric}: {n} folds")
+def log_dropped(dropped: pd.DataFrame) -> None:
     report_utils.log(f"Folds dropped for missing values: {len(dropped)}")
     for r in dropped.itertuples():
         report_utils.log(f"Dropped {r.dataset} {r.metric} fold {r.fold}")
 
-    report_utils.h2("H1: Does the Gap Change?")
+
+def test_h1(folds: pd.DataFrame) -> None:
+    """Friedman over the metrics, then Nemenyi, then the gap per cell."""
+    report_utils.h2("Does the Gap Change With the Metric?")
+    report_utils.log(f"Split: {H1_ARM}")
+    report_utils.log(f"Datasets: {', '.join(H1_DATASETS)}")
+    per_fold, dropped = fold_gaps(folds, H1_ARM, H1_DATASETS, METRICS, HORIZONS)
+    log_counts(per_fold, "folds")
+    log_dropped(dropped)
+
     tests = pd.DataFrame([friedman_metric(per_fold, METRICS)])
     report_utils.table(tests, decimals=4)
+    save(tests, H1_TESTS_FILE)
 
     p = tests.p_value.iloc[0]
-    pairs = None
     if p < ALPHA:
-        report_utils.h2("Nemenyi Test: Which Metrics Differ?")
+        report_utils.h2("Nemenyi Test, Which Metrics Differ?")
         pairs, mean_rank, critical = nemenyi(per_fold, METRICS, ALPHA)
         pairs = pairs.rename_axis("metric").reset_index()
         report_utils.table(pairs, decimals=4)
+        save(pairs, H1_NEMENYI_FILE)
         ranks = ", ".join(f"{m} {r:.1f}" for m, r in mean_rank.items())
         report_utils.log(f"Nemenyi p values. Mean ranks: {ranks}.")
         report_utils.log(
@@ -97,25 +113,74 @@ def analyze() -> None:
         )
 
     report_utils.h2("Gap per Cell")
-    cells = cell_table(per_fold, DATASETS, METRICS)
+    cells = cell_table(per_fold, H1_DATASETS, METRICS)
     report_utils.table(cells, decimals=4)
+    save(cells, H1_CELLS_FILE)
     report_utils.log(
         "gap is positive when DL is better. mean_rank is 1 for the smallest "
         f"standardized gap in a fold and {len(METRICS)} for the largest."
     )
-
     if p < ALPHA:
         report_utils.log(
-            f"H1 is supported: p = {p:.4f}, below {ALPHA}. The gap changes with the metric."
+            f"H1 is supported: p = {p:.4f}, below {ALPHA}. The gap changes with the "
+            "metric."
         )
     else:
-        report_utils.log(f"H0 is not rejected: p = {p:.4f}, not below {ALPHA}.")
+        report_utils.log(f"H1: H0 is not rejected, p = {p:.4f}, not below {ALPHA}.")
 
+
+def test_h2(folds: pd.DataFrame) -> None:
+    """One sided Wilcoxon on the later minus matched differences, averaged over metrics."""
+    report_utils.h2("Is the DL Advantage Smaller on Later Data?")
+    report_utils.log(f"Splits: {H2_ARMS[0]} against {H2_ARMS[1]}, fold i with fold i")
+    report_utils.log(f"Datasets: {', '.join(H2_DATASETS)}")
+    pairs, dropped = arm_differences(folds, H2_ARMS, H2_DATASETS, METRICS, HORIZONS)
+    log_counts(pairs, "fold pairs")
+    log_dropped(dropped)
+
+    tests = pd.DataFrame([wilcoxon_overall(pairs, METRICS)])
+    report_utils.table(tests, decimals=4)
+    save(tests, H2_TESTS_FILE)
+    report_utils.log(
+        "d is the gap on later data minus the gap on the matched split, standardized "
+        "and averaged over the metrics. The test asks whether it is below 0."
+    )
+
+    report_utils.h2("Difference per Domain and Metric")
+    cells = difference_table(pairs, H2_DATASETS, METRICS)
+    report_utils.table(cells, decimals=4)
+    save(cells, H2_CELLS_FILE)
+    report_utils.log(
+        "mean_d below 0 means the DL advantage is smaller on later data. "
+        "pairs_dl_lead_smaller counts the fold pairs where it is. No test between "
+        "domains."
+    )
+
+    p = tests.p_value.iloc[0]
+    if p < ALPHA:
+        report_utils.log(
+            f"H2 is supported: p = {p:.4f}, below {ALPHA}. The DL advantage is smaller "
+            "on later data."
+        )
+    else:
+        report_utils.log(f"H2: H0 is not rejected, p = {p:.4f}, not below {ALPHA}.")
+
+
+@report_utils.logged
+def analyze() -> None:
+    """Run every step of this process."""
+    report_utils.h1("ANALYZE: H1")
+    report_utils.log(f"Metrics: {', '.join(METRICS)}")
+    report_utils.log(f"Horizons: {', '.join(f'{h:g}' for h in HORIZONS)}")
+    raw = load(BENCHMARK_FILES.values())
+    missing = missing_values(raw)
+    report_utils.log(f"Benchmark rows without a value: {int(missing.missing.sum())}")
+    folds = seed_mean(raw)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    save(tests, TESTS_FILE)
-    save(cells, CELLS_FILE)
-    if pairs is not None:
-        save(pairs, NEMENYI_FILE)
+
+    test_h1(folds)
+    report_utils.h1("ANALYZE: H2")
+    test_h2(folds)
     report_utils.log(f"Saved tables in {OUTPUT_DIR}")
 
 

@@ -6,9 +6,11 @@ Every pipeline prints progress as log lines while it works and a table at the en
 """
 
 import functools
+import inspect
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -35,12 +37,11 @@ class _Tee:
 
 
 # The console streams and log file of the running pipeline, while one is logging
-_active = None
+_active: dict[str, Any] = {}
 
 
 def start_log(name: str) -> None:
     """Copy everything printed from now on, errors included, to a new file in logs/."""
-    global _active
     stop_log()
     log_dir = Path("logs")
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -49,19 +50,19 @@ def start_log(name: str) -> None:
         "w",
         encoding="utf-8",
     )
-    _active = (sys.stdout, sys.stderr, file)
+    _active.update(stdout=sys.stdout, stderr=sys.stderr, file=file)
     sys.stdout = _Tee(sys.stdout, file)
     sys.stderr = _Tee(sys.stderr, file)
 
 
 def stop_log() -> None:
     """Stop copying and give the console streams back."""
-    global _active
-    if _active is None:
+    if not _active:
         return
-    sys.stdout, sys.stderr, file = _active
-    file.close()
-    _active = None
+    sys.stdout = _active["stdout"]
+    sys.stderr = _active["stderr"]
+    _active["file"].close()
+    _active.clear()
 
 
 def logged(func):
@@ -69,7 +70,7 @@ def logged(func):
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        start_log(Path(sys.modules[func.__module__].__file__).stem)
+        start_log(Path(inspect.getfile(func)).stem)
         try:
             return func(*args, **kwargs)
         finally:
@@ -145,6 +146,7 @@ def _cell(value, decimals: int) -> str:
 
 def table(df: pd.DataFrame, decimals: int = 5, right: tuple = ()) -> None:
     """Print a frame as an aligned table. A cell with line breaks spans several lines."""
+    global _at_blank
     cols = list(df.columns)
     cells = [[_cell(v, decimals) for v in row] for row in df.itertuples(index=False)]
     widths = [
@@ -173,3 +175,4 @@ def table(df: pd.DataFrame, decimals: int = 5, right: tuple = ()) -> None:
     for lines in body:
         print("\n".join(lines))
         print("-" * width)
+    _at_blank = False

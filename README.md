@@ -41,8 +41,8 @@ python src/pipelines/3_analyze.py
 Or run all of them in this order with `python src/main.py`.
 
 **4. Output.** Every step writes into the numbered folders of `data/` (see
-[Data folder](#data-folder)). The H1 tables (Friedman, Nemenyi and the gap per cell)
-are in `data/analysis/`. Each run also writes what it prints to
+[Data folder](#data-folder)). The H1 and H2 tables (Friedman, Nemenyi, Wilcoxon and the
+gaps per cell) are in `data/analysis/`. Each run also writes what it prints to
 `logs/<pipeline name>_<date>_<time>.log`. The slow steps (tune and benchmark) skip the
 work already saved, so an interrupted run continues where it stopped.
 
@@ -72,7 +72,7 @@ Each dataset has its own folder, and every step writes to the next numbered fold
 data/
   medical/     0_raw  1_merged  2_folds  3_normalized  4_tuning  5_benchmark
   financial/   0_raw  1_merged  2_folds  3_normalized  4_tuning  5_benchmark
-  analysis/    the H1 tables
+  analysis/    the H1 and H2 tables
 ```
 
 | folder         | content                          | written by    |
@@ -83,7 +83,7 @@ data/
 | `3_normalized` | the tables used by the models    | `0_prepare`   |
 | `4_tuning`     | the best settings per model      | `1_tune`      |
 | `5_benchmark`  | scores and predictions per model | `2_benchmark` |
-| `analysis/`    | the H1 tables                    | `3_analyze`   |
+| `analysis/`    | the H1 and H2 tables             | `3_analyze`   |
 
 ### Notes
 
