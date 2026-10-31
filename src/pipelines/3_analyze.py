@@ -59,8 +59,7 @@ H1_CELLS_FILE = OUTPUT_DIR / "h1_cells.csv"
 H1_NEMENYI_FILE = OUTPUT_DIR / "h1_nemenyi.csv"
 H2_TESTS_FILE = OUTPUT_DIR / "h2_wilcoxon.csv"
 H2_CELLS_FILE = OUTPUT_DIR / "h2_cells.csv"
-H3_TESTS_FILE = OUTPUT_DIR / "h3_sign_test.csv"
-H3_FOLDS_FILE = OUTPUT_DIR / "h3_folds.csv"
+H3_TESTS_FILE = OUTPUT_DIR / "h3_tau_sign.csv"
 H3_CELLS_FILE = OUTPUT_DIR / "h3_cells.csv"
 
 METRICS = ("scaled_brier", "concordance", "calibration_gap", "cr_d_calibration")
@@ -190,7 +189,6 @@ def test_h3(folds: pd.DataFrame) -> None:
         folds, H3_ARMS, H3_DATASETS, (H3_RANK_METRIC, H3_PROBABILITY_METRIC), HORIZONS
     )
     per_fold = fold_agreement(values, H3_RANK_METRIC, H3_PROBABILITY_METRIC)
-    save(per_fold, H3_FOLDS_FILE)
 
     report_utils.h2("Agreement per Cell")
     cells = agreement_table(per_fold)
@@ -199,7 +197,7 @@ def test_h3(folds: pd.DataFrame) -> None:
 
     tests = pd.DataFrame([sign_test_tau(per_fold, ALPHA)])
     report_utils.table(tests, decimals=4)
-    save(tests, H3_TESTS_FILE)
+    save(tests[["p_value"]], H3_TESTS_FILE)
 
     row = tests.iloc[0]
     report_utils.log(

@@ -365,8 +365,8 @@ def agreement_table(per_fold):
         differs=per_fold.best_by_rank != per_fold.best_by_probability,
     )
     return marked.groupby(["dataset", "arm"], as_index=False).agg(
+        mean_tau=("tau", "mean"),
         folds=("tau", "size"),
         untied=("untied", "sum"),
-        mean_tau=("tau", "mean"),
         best_model_differs=("differs", "sum"),
     )
